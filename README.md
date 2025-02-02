@@ -1,3 +1,4 @@
+https://docs.aws.amazon.com/sagemaker/latest/dg/train-remote-decorator.html#train-remote-decorator-env
 Here's a comprehensive README.md file for the AWS Cost Analysis Tool:
 
 ```markdown
