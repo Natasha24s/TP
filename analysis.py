@@ -677,10 +677,181 @@ def format_excel_with_highlights(worksheet, sheet_name=''):
     worksheet.freeze_panes = 'A2'
     worksheet.auto_filter.ref = worksheet.dimensions
 
-def save_analysis_to_excel(output_file, df_summary, df_comparative, df_trends, df_monthly_trends, df_cumulative):
+def create_service_category_analysis(cleaned_data):
+    """Create analysis of service category percentages for each customer"""
+    
+    # Define all service categories
+    service_categories = {
+        'Analytics Services': ['Analytics', 'EMR', 'Athena', 'QuickSight', 'Glue', 'Kinesis Analytics', 'Lake Formation'],
+        'Automation and Messaging Group': ['SNS', 'SQS', 'EventBridge', 'MQ', 'Step Functions'],
+        'Compute Services': ['EC2', 'ECS', 'EKS', 'Fargate', 'Lambda', 'Compute', 'NAT Gateway', 'Elastic Load Balancing'],
+        'DB Services': ['RDS', 'DynamoDB', 'Elasticache', 'Aurora', 'Database', 'MySQL', 'PostgreSQL'],
+        'Developer Tools': ['CodeBuild', 'CodePipeline', 'CodeDeploy', 'CodeCommit', 'Cloud9'],
+        'Edge': ['CloudFront', 'Route53', 'Edge Location', 'CDN'],
+        'Identity Services': ['IAM', 'Directory Service', 'Cognito', 'SSO'],
+        'Machine Learning & Deep Learning': ['SageMaker', 'Rekognition', 'Comprehend', 'Textract', 'Forecast'],
+        'Management Tools': ['CloudTrail', 'Config', 'SSM', 'Systems Manager', 'OpsWorks', 'Control Tower'],
+        'Marketplaces': ['AWS Marketplace', 'Marketplace'],
+        'Marketplaces/Control Services': ['AWS Control Services', 'Service Catalog'],
+        'Migration-Services': ['Migration', 'Transfer', 'DataSync'],
+        'Mobile Services': ['Mobile Hub', 'AppSync', 'Device Farm'],
+        'Monitoring Services': ['CloudWatch', 'Monitoring', 'Logs', 'Metrics', 'Events'],
+        'Networking Bandwidth Services': ['VPC', 'Direct Connect', 'Transit Gateway', 'PrivateLink'],
+        'Others': ['Other'],
+        'Productivity Applications': ['WorkSpaces', 'WorkDocs', 'Chime', 'Connect'],
+        'Professional Services/Training': ['Professional Services', 'Training', 'Support'],
+        'Security Services': ['GuardDuty', 'KMS', 'Security', 'WAF', 'Shield', 'Firewall'],
+        'Storage': ['S3', 'EBS', 'EFS', 'Storage', 'Glacier', 'Backup'],
+        'Streaming Services': ['Kinesis', 'Media Services', 'Elemental'],
+        'Support Services': ['AWS Support', 'Premium Support'],
+        'Uncategorized': []
+    }
+
+    analysis_data = []
+    
+    for account_name, df in cleaned_data.items():
+        if account_name == 'Industry Average':
+            continue
+            
+        total_spend = 0
+        category_spend = {category: 0 for category in service_categories.keys()}
+        
+        # Calculate spending for each service
+        for idx, row in df.iterrows():
+            service_name = str(row.iloc[0]).lower()
+            spend = clean_amount(row.iloc[1])
+            total_spend += spend
+            
+            # Categorize spending
+            categorized = False
+            for category, services in service_categories.items():
+                if any(service.lower() in service_name for service in services):
+                    category_spend[category] += spend
+                    categorized = True
+                    break
+            
+            if not categorized:
+                category_spend['Uncategorized'] += spend
+        
+        # Calculate percentages
+        row_data = {
+            'Customer Name': account_name,
+            'Total Spend': f"${total_spend:,.2f}"
+        }
+        
+        for category in service_categories.keys():
+            percentage = (category_spend[category] / total_spend * 100) if total_spend > 0 else 0
+            row_data[f"{category} %"] = f"{percentage:.2f}%"
+        
+        analysis_data.append(row_data)
+    
+    # Calculate industry average
+    if analysis_data:
+        avg_data = {
+            'Customer Name': 'Industry Average',
+            'Total Spend': f"${np.mean([float(d['Total Spend'].replace('$', '').replace(',', '')) for d in analysis_data]):,.2f}"
+        }
+        
+        for category in service_categories.keys():
+            percentages = [float(d[f"{category} %"].replace('%', '')) for d in analysis_data]
+            avg_data[f"{category} %"] = f"{np.mean(percentages):.2f}%"
+        
+        analysis_data.append(avg_data)
+    
+    # Create DataFrame and sort by Total Spend
+    df_analysis = pd.DataFrame(analysis_data)
+    df_analysis['Total Spend Numeric'] = df_analysis['Total Spend'].apply(
+        lambda x: float(x.replace('$', '').replace(',', ''))
+    )
+    df_analysis = df_analysis.sort_values('Total Spend Numeric', ascending=False)
+    df_analysis = df_analysis.drop('Total Spend Numeric', axis=1)
+    
+    return df_analysis
+
+def save_analysis_to_excel(output_file, df_summary, df_comparative, df_trends, df_monthly_trends, df_cumulative, cleaned_data):
     """Save all analysis results to Excel file with comprehensive formatting"""
     with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        # Create and save service category analysis
+        df_service_categories = create_service_category_analysis(cleaned_data)
+        df_service_categories.to_excel(writer, sheet_name='Service Categories', index=False)
+        
+        # Save other analyses
+        df_summary.to_excel(writer, sheet_name='Domain Summary', index=False)
+        df_comparative.to_excel(writer, sheet_name='Account Comparison', index=False)
+        df_trends.to_excel(writer, sheet_name='Monthly Trends', index=True)
+        df_monthly_trends.to_excel(writer, sheet_name='Detailed Analysis', index=False)
+        df_cumulative.to_excel(writer, sheet_name='Cumulative Analysis', index=False)
+        
+        workbook = writer.book
+        
+        # Format Service Categories sheet
+        service_cat_sheet = workbook['Service Categories']
+        format_service_category_sheet(service_cat_sheet)
+        
+        # Format other sheets
+        for sheet_name in workbook.sheetnames:
+            if sheet_name != 'Service Categories':
+                format_excel_with_highlights(workbook[sheet_name], sheet_name)
+
+def format_service_category_sheet(worksheet):
+    """Format the service category analysis sheet"""
+    # Colors
+    header_color = "1F4E78"
+    alt_row = "F5F5F5"
+    highlight_threshold = "90EE90"  # Light green for high percentages
+    
+    # Format headers
+    for cell in worksheet[1]:
+        cell.fill = PatternFill(start_color=header_color, end_color=header_color, fill_type="solid")
+        cell.font = Font(color="FFFFFF", bold=True)
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    
+    # Format data rows
+    for row_idx, row in enumerate(worksheet.iter_rows(min_row=2), 2):
+        fill_color = alt_row if row_idx % 2 == 0 else "FFFFFF"
+        
+        for cell_idx, cell in enumerate(row):
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            # Basic cell formatting
+            if cell_idx > 1:  # Percentage columns
+                try:
+                    value = float(str(cell.value).replace('%', ''))
+                    if value > 20:  # Highlight significant percentages
+                        cell.fill = PatternFill(start_color=highlight_threshold, end_color=highlight_threshold, fill_type="solid")
+                    else:
+                        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+                except:
+                    cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+            else:
+                cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+                cell.font = Font(bold=True)
+    
+    # Adjust column widths
+    for column in worksheet.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 40) * 1.2
+        worksheet.column_dimensions[column_letter].width = adjusted_width
+    
+    # Freeze panes and add filters
+    worksheet.freeze_panes = 'A2'
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+def save_analysis_to_excel(output_file, df_summary, df_comparative, df_trends, df_monthly_trends, df_cumulative, cleaned_data):
+    """Save all analysis results to Excel file with comprehensive formatting"""
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        # Create service category analysis
+        print("Creating Service Category Analysis...")
+        df_service_categories = create_service_category_analysis(cleaned_data)
+        
         # Save all sheets
+        df_service_categories.to_excel(writer, sheet_name='Service Categories', index=False)
         df_summary.to_excel(writer, sheet_name='Domain Summary', index=False)
         df_comparative.to_excel(writer, sheet_name='Account Comparison', index=False)
         df_trends.to_excel(writer, sheet_name='Monthly Trends', index=True)
@@ -690,7 +861,10 @@ def save_analysis_to_excel(output_file, df_summary, df_comparative, df_trends, d
         # Format all sheets
         workbook = writer.book
         for sheet_name in workbook.sheetnames:
-            format_excel_with_highlights(workbook[sheet_name], sheet_name)
+            if sheet_name == 'Service Categories':
+                format_service_category_sheet(workbook[sheet_name])
+            else:
+                format_excel_with_highlights(workbook[sheet_name], sheet_name)
 
 if __name__ == "__main__":
     try:
@@ -738,33 +912,39 @@ if __name__ == "__main__":
             df_comparative,
             df_trends,
             df_monthly_trends,
-            df_cumulative
+            df_cumulative,
+            cleaned_data
         )
         
         print("\nAnalysis Complete!")
         print("=" * 50)
         print("\nOutput Excel file contains:")
-        print("1. Domain Summary:")
+        print("1. Service Categories:")
+        print("   - Detailed breakdown of service usage percentages")
+        print("   - Industry average comparisons")
+        print("   - Service concentration analysis")
+        
+        print("\n2. Domain Summary:")
         print("   - Overall service domain spending overview")
         print("   - Domain-wise total and average spend")
         print("   - Account distribution across domains")
         
-        print("\n2. Account Comparison:")
+        print("\n3. Account Comparison:")
         print("   - Account-level spending patterns")
         print("   - Domain concentration analysis")
         print("   - Month-over-month changes")
         
-        print("\n3. Monthly Trends:")
+        print("\n4. Monthly Trends:")
         print("   - Monthly spending patterns")
         print("   - Seasonal variations")
         print("   - Growth trends")
         
-        print("\n4. Detailed Analysis:")
+        print("\n5. Detailed Analysis:")
         print("   - Comprehensive spending analysis")
         print("   - Anomaly detection")
         print("   - Risk assessment")
         
-        print("\n5. Cumulative Analysis:")
+        print("\n6. Cumulative Analysis:")
         print("   - Cross-domain comparisons")
         print("   - Account spending distributions")
         print("   - Domain utilization patterns")
@@ -772,6 +952,17 @@ if __name__ == "__main__":
         # Print key findings
         print("\nKey Findings:")
         print("-" * 30)
+        
+        # Service Category Insights
+        df_service_categories = create_service_category_analysis(cleaned_data)
+        print("\nTop Service Categories:")
+        for _, row in df_service_categories.iterrows():
+            if row['Customer Name'] == 'Industry Average':
+                for col in df_service_categories.columns:
+                    if col.endswith('%'):
+                        value = float(row[col].replace('%', ''))
+                        if value > 10:  # Show categories with >10% usage
+                            print(f"- {col.replace(' %', '')}: {row[col]}")
         
         # High risk patterns
         high_risk_patterns = df_monthly_trends[df_monthly_trends['Risk Level'] == 'High']
@@ -803,6 +994,7 @@ if __name__ == "__main__":
         print("2. Investigate significant variations")
         print("3. Optimize top spending domains")
         print("4. Monitor monthly trends for cost optimization")
+        print("5. Review service category distribution")
         
         print("\nAnalysis file saved successfully!")
         print(f"Location: {os.path.abspath(output_file)}")
