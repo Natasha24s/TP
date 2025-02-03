@@ -12,54 +12,102 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 def get_service_domains():
     """Return list of service domains and their associated services"""
     return {
+        'Analytics Services': [
+            'EMR', 'Athena', 'Analytics', 'Glue', 'QuickSight', 'Redshift',
+            'Kinesis Analytics', 'Lake Formation', 'Data Pipeline', 'OpenSearch'
+        ],
+        'Automation and Messaging Group': [
+            'SNS', 'SQS', 'EventBridge', 'MQ', 'Step Functions', 'Simple Queue Service',
+            'Simple Notification Service', 'Amazon MQ', 'AWS Step Functions'
+        ],
         'Compute Services': [
             'EC2', 'ECS', 'EKS', 'Fargate', 'Lambda', 'Compute', 'Container',
-            'NAT Gateway', 'Elastic Load Balancing', 'Load Balancer'
+            'NAT Gateway', 'Elastic Load Balancing', 'Load Balancer', 'Elastic Compute',
+            'Elastic Container', 'Elastic Kubernetes', 'AWS Lambda', 'Savings Plan'
         ],
         'DB Services': [
             'RDS', 'DynamoDB', 'Elasticache', 'Aurora', 'Database', 'DDB',
-            'MySQL', 'PostgreSQL', 'MariaDB', 'SQL Server'
+            'MySQL', 'PostgreSQL', 'MariaDB', 'SQL Server', 'Neptune', 'DocumentDB',
+            'Relational Database', 'NoSQL', 'Redis', 'Memcached'
         ],
-        'Storage': [
-            'S3', 'EBS', 'EFS', 'Storage', 'Glacier', 'Elastic Block Store',
-            'Backup', 'Transfer'
+        'Developer Tools': [
+            'CodeBuild', 'CodePipeline', 'CodeDeploy', 'CodeCommit', 'Cloud9',
+            'CodeStar', 'CodeArtifact', 'CodeGuru', 'X-Ray', 'Developer Tools'
         ],
         'Edge': [
             'CloudFront', 'Route53', 'PerimeterProtection', 'Edge', 'CDN',
-            'DNS', 'Cloud Front'
+            'DNS', 'Cloud Front', 'Global Accelerator', 'Route 53'
         ],
-        'Networking Bandwidth Services': [
-            'Data Transfer', 'DTO', 'DTIR', 'Bandwidth', 'Network',
-            'PrivateLink', 'Transit Gateway', 'VPC'
-        ],
-        'Monitoring Services': [
-            'CloudWatch', 'Monitoring', 'Logs', 'Metrics', 'Events',
-            'Performance'
-        ],
-        'Security Services': [
-            'GuardDuty', 'KMS', 'Security', 'Inspector', 'IAM', 'Certificate',
-            'Firewall', 'WAF', 'Shield', 'Secrets Manager', 'ESS'
+        'Identity Services': [
+            'IAM', 'Directory Service', 'Cognito', 'SSO', 'Single Sign-On',
+            'Identity Center', 'Resource Access Manager', 'AWS Organizations'
         ],
         'Machine Learning & Deep Learning': [
             'SageMaker', 'Rekognition', 'Comprehend', 'ML', 'AI', 'Deep Learning',
-            'Forecast', 'Textract', 'Polly', 'Transcribe', 'Bedrock'
-        ],
-        'Analytics Services': [
-            'EMR', 'Athena', 'Analytics', 'Glue', 'QuickSight', 'Redshift',
-            'Kinesis Analytics', 'Lake Formation'
+            'Forecast', 'Textract', 'Polly', 'Transcribe', 'Bedrock', 'Lex',
+            'Personalize', 'Translate', 'DeepLens', 'DeepRacer'
         ],
         'Management Tools': [
             'CloudTrail', 'Config', 'SSM', 'Management', 'Systems Manager',
-            'OpsWorks', 'Service Catalog', 'Control Tower'
+            'OpsWorks', 'Service Catalog', 'Control Tower', 'License Manager',
+            'Managed Services', 'CloudFormation', 'Auto Scaling'
         ],
-        'Streaming Services': [
-            'Kinesis', 'SNS', 'SQS', 'EventBridge', 'MQ', 'Streaming',
-            'Message Queue', 'Notification'
+        'Marketplaces': [
+            'AWS Marketplace', 'Marketplace Subscriptions', 'Marketplace Entitlements',
+            'Developer Marketplace'
+        ],
+        'Marketplaces/Control Services': [
+            'AWS Control Services', 'Service Catalog', 'Control Tower',
+            'AWS Organizations', 'AWS Control Tower'
+        ],
+        'Migration-Services': [
+            'Migration', 'Transfer', 'DataSync', 'Application Discovery',
+            'Database Migration', 'Server Migration', 'Migration Hub'
+        ],
+        'Mobile Services': [
+            'Mobile Hub', 'AppSync', 'Device Farm', 'Amplify', 'API Gateway',
+            'Mobile Analytics'
+        ],
+        'Monitoring Services': [
+            'CloudWatch', 'Monitoring', 'Logs', 'Metrics', 'Events',
+            'Performance', 'Application Insights', 'Synthetics'
+        ],
+        'Networking Bandwidth Services': [
+            'Data Transfer', 'DTO', 'DTIR', 'Bandwidth', 'Network',
+            'PrivateLink', 'Transit Gateway', 'VPC', 'Direct Connect',
+            'Virtual Private Network', 'Elastic Load Balancing'
+        ],
+        'Others': [
+            'Other', 'Miscellaneous', 'Additional Services'
         ],
         'Productivity Applications': [
             'WorkSpaces', 'WorkDocs', 'Chime', 'Connect', 'Communication',
-            'Productivity', 'Workmail'
-        ]
+            'Productivity', 'Workmail', 'AppStream', 'WorkLink'
+        ],
+        'Professional Services/Training': [
+            'Professional Services', 'Training', 'Support', 'Consulting',
+            'AWS Training', 'Technical Support', 'Business Support',
+            'Enterprise Support', 'AWS Certification'
+        ],
+        'Security Services': [
+            'GuardDuty', 'KMS', 'Security', 'Inspector', 'IAM', 'Certificate',
+            'Firewall', 'WAF', 'Shield', 'Secrets Manager', 'ESS', 'Macie',
+            'Security Hub', 'Detective', 'Network Firewall', 'ACM'
+        ],
+        'Storage': [
+            'S3', 'EBS', 'EFS', 'Storage', 'Glacier', 'Elastic Block Store',
+            'Backup', 'Transfer', 'FSx', 'Storage Gateway', 'Simple Storage Service'
+        ],
+        'Streaming Services': [
+            'Kinesis', 'SNS', 'SQS', 'EventBridge', 'MQ', 'Streaming',
+            'Message Queue', 'Notification', 'Data Streams', 'Firehose',
+            'Video Streams', 'Amazon MSK'
+        ],
+        'Support Services': [
+            'AWS Support', 'Premium Support', 'Basic Support', 'Developer Support',
+            'Business Support', 'Enterprise Support'
+        ],
+        'Uncategorized': []
     }
 
 def clean_excel_data(excel_file_path):
