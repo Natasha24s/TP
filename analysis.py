@@ -477,8 +477,7 @@ def clean_amount_string(val):
         return 0.0
 
 def analyze_monthly_patterns(cleaned_data, account_domain_spend):
-    """Analyze monthly spending patterns and detect anomalies"""
-    domain_mapping = get_service_domains()
+    """Analyze monthly spending patterns using direct data from MyPodData.xlsx"""
     monthly_patterns = []
     
     for sheet_name, df in cleaned_data.items():
@@ -488,56 +487,57 @@ def analyze_monthly_patterns(cleaned_data, account_domain_spend):
             'Service Patterns': {}
         }
         
-        # Get total spend from 'Last 12 months total'
-        total_row = df[df.iloc[:, 0].str.contains('total', case=False, na=False)]
-        if not total_row.empty:
-            total_spend = clean_amount_string(total_row.iloc[0]['Last 12 months total'])
-        else:
-            continue
-
-        for domain in domain_mapping.keys():
-            domain_rows = df[df.apply(lambda row: get_service_domain(str(row.iloc[0]), domain_mapping) == domain, axis=1)]
-            if domain_rows.empty:
-                continue
-
-            # Get monthly spend for the domain
-            monthly_cols = [col for col in df.columns if any(month in col for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])]
-            monthly_spend = []
-            
-            for month in monthly_cols:
-                month_total = sum(clean_amount_string(val) for val in domain_rows[month])
-                monthly_spend.append(month_total)
-            
-            if sum(monthly_spend) > 0:
-                mean_spend = np.mean(monthly_spend)
-                std_spend = np.std(monthly_spend)
+        # Skip the header rows and get service rows
+        service_rows = df[df['Service group'].notna()]
+        
+        # Get monthly columns (assuming they are in columns 3-14)
+        monthly_cols = df.columns[2:14]  # First 2 columns are service group and total
+        
+        for index, row in service_rows.iterrows():
+            service_name = row['Service group']
+            if isinstance(service_name, str) and not 'View AWS service' in service_name:
+                monthly_spend = []
                 
-                anomalies = []
-                for month_idx, spend in enumerate(monthly_spend):
-                    z_score = (spend - mean_spend) / std_spend if std_spend > 0 else 0
-                    if abs(z_score) > 2:
-                        anomalies.append({
-                            'Month': month_idx + 1,
-                            'Spend': spend,
-                            'Z-score': z_score
-                        })
+                # Get monthly values directly from the Excel data
+                for col in monthly_cols:
+                    value = row[col]
+                    if isinstance(value, str):
+                        value = clean_amount(value)
+                    monthly_spend.append(float(value) if value else 0.0)
                 
-                pattern_info = {
-                    'Monthly Spend': monthly_spend,
-                    'Average': mean_spend,
-                    'Std Dev': std_spend,
-                    'Anomalies': anomalies,
-                    'Trend': calculate_trend_pattern(monthly_spend),
-                    'Max Month': np.argmax(monthly_spend) + 1,
-                    'Min Month': np.argmin(monthly_spend) + 1,
-                    'Volatility': std_spend / mean_spend if mean_spend > 0 else 0
-                }
-                
-                account_patterns['Service Patterns'][domain] = pattern_info
+                if sum(monthly_spend) > 0:
+                    mean_spend = np.mean(monthly_spend)
+                    std_spend = np.std(monthly_spend)
+                    
+                    # Calculate anomalies
+                    anomalies = []
+                    for month_idx, spend in enumerate(monthly_spend):
+                        z_score = (spend - mean_spend) / std_spend if std_spend > 0 else 0
+                        if abs(z_score) > 2:
+                            anomalies.append({
+                                'Month': month_idx + 1,
+                                'Spend': spend,
+                                'Z-score': z_score
+                            })
+                    
+                    # Calculate pattern info
+                    pattern_info = {
+                        'Monthly Spend': monthly_spend,
+                        'Average': mean_spend,
+                        'Std Dev': std_spend,
+                        'Anomalies': anomalies,
+                        'Trend': calculate_trend_pattern(monthly_spend),
+                        'Max Month': np.argmax(monthly_spend) + 1,
+                        'Min Month': np.argmin(monthly_spend) + 1,
+                        'Volatility': std_spend / mean_spend if mean_spend > 0 else 0
+                    }
+                    
+                    account_patterns['Service Patterns'][service_name] = pattern_info
         
         monthly_patterns.append(account_patterns)
     
     return monthly_patterns
+
 
 def calculate_trend_pattern(monthly_data):
     """Identify the trend pattern in monthly spending"""
