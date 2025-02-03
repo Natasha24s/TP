@@ -214,62 +214,70 @@ def analyze_service_domains(cleaned_data):
     domain_accounts = {domain: set() for domain in domain_mapping.keys()}
     account_domain_spend = {}
     account_totals = {}
-    
-    # First pass - get account totals
+
+    # First pass - get account totals 
     for sheet_name, df in cleaned_data.items():
         account_totals[sheet_name] = get_account_total_spend(df)
-    
-    # Store account totals in the account_domain_spend dictionary
-    for sheet_name in cleaned_data.keys():
         account_domain_spend[sheet_name] = {
             'total': account_totals[sheet_name],
             'domains': {domain: 0 for domain in domain_mapping.keys()}
         }
-    
-    # Second pass - process services
+
+    # Second pass - process service domains and their spends
     for sheet_name, df in cleaned_data.items():
         try:
+            # Track when we're in a domain section
+            current_domain = None
+            
             for idx, row in df.iterrows():
                 service_name = str(row.iloc[0])
+                
+                # Skip empty rows and "View AWS service" rows
                 if pd.isna(service_name) or 'View AWS service' in service_name:
                     continue
-                
-                domain = get_service_domain(service_name, domain_mapping)
-                if domain:
-                    spend = clean_amount(row.iloc[1])
-                    if spend > 0:
-                        domain_totals[domain] += spend
-                        domain_accounts[domain].add(sheet_name)
-                        account_domain_spend[sheet_name]['domains'][domain] += spend
-        
+
+                # Check if this row is a domain header
+                for domain, services in domain_mapping.items():
+                    # Check if the service name exactly matches a domain name
+                    if service_name == domain:
+                        spend = clean_amount(row.iloc[1])  # Get spend from column 2
+                        if spend > 0:
+                            domain_totals[domain] += spend
+                            domain_accounts[domain].add(sheet_name)
+                            account_domain_spend[sheet_name]['domains'][domain] = spend
+                        break
+
         except Exception as e:
             print(f"Error processing {sheet_name}: {str(e)}")
-    
-    # Create summary using actual account totals
+            continue
+
+    # Create summary
     summary_data = []
     total_spend = sum(account_totals.values())
-    
+
     for domain in domain_mapping.keys():
         spend = domain_totals[domain]
         unique_accounts = len(domain_accounts[domain])
         avg_spend = spend / unique_accounts if unique_accounts > 0 else 0
         percentage = (spend / total_spend * 100) if total_spend > 0 else 0
-        
+
         summary_data.append({
             'Service Domain': domain,
             'Total Spend': f"${spend:,.2f}",
             'Number of Accounts': unique_accounts,
-            'Average Spend': f"${avg_spend:,.2f}",
+            'Average Spend': f"${avg_spend:,.2f}", 
             'Percentage of Total': f"{percentage:.2f}%",
             'Active Accounts': ', '.join(sorted(domain_accounts[domain])) if unique_accounts > 0 else 'None'
         })
-    
+
     df_summary = pd.DataFrame(summary_data)
     return df_summary.sort_values(
         'Total Spend',
         key=lambda x: pd.to_numeric(x.str.replace('$', '').replace(',', ''), errors='coerce'),
         ascending=False
     ), account_domain_spend
+
+
 
 def create_comparative_analysis(cleaned_data, account_domain_spend):
     """Create comparative analysis between accounts"""
@@ -810,18 +818,12 @@ def format_excel_with_highlights(worksheet, sheet_name=''):
     worksheet.auto_filter.ref = worksheet.dimensions
 
 def create_service_category_analysis(cleaned_data):
-    """Create analysis of service category percentages for each customer"""
-    
-    # Use existing service domains function
+    """Create analysis of service category percentages based on domain header rows"""
     service_categories = get_service_domains()
-
     analysis_data = []
     
     for account_name, df in cleaned_data.items():
         try:
-            if account_name == 'Industry Average':
-                continue
-                
             # Get total spend from first data row
             total_spend = get_account_total_spend(df)
             print(f"Processing {account_name} with total spend: ${total_spend:,.2f}")
@@ -829,22 +831,20 @@ def create_service_category_analysis(cleaned_data):
             # Initialize category spending
             category_spend = {category: 0 for category in service_categories.keys()}
             
-            # Process each service row
+            # Process each row
             for idx, row in df.iterrows():
                 service_name = str(row.iloc[0])
                 if pd.isna(service_name) or 'View AWS service' in service_name:
                     continue
-                    
-                spend = clean_amount(row.iloc[1])
                 
-                # Use the same domain matching logic as in analyze_service_domains
-                domain = get_service_domain(service_name, service_categories)
-                if domain:
-                    category_spend[domain] += spend
-                else:
-                    category_spend['Uncategorized'] += spend
+                # Check if this row is a domain header by exact match
+                for domain in service_categories.keys():
+                    if service_name == domain:
+                        spend = clean_amount(row.iloc[1])  # Get spend from column 2
+                        category_spend[domain] = spend
+                        break
             
-            # Calculate percentages and create row data
+            # Calculate row data
             row_data = {
                 'Customer Name': account_name,
                 'Total Spend': f"${total_spend:,.2f}"
@@ -854,65 +854,49 @@ def create_service_category_analysis(cleaned_data):
             for category in service_categories.keys():
                 spend = category_spend[category]
                 percentage = (spend / total_spend * 100) if total_spend > 0 else 0
-                row_data[f"{category} %"] = f"{percentage:.2f}%"
-                row_data[f"{category} Spend"] = f"${spend:,.2f}"
-            
-            # Add top categories
-            top_categories = sorted(
-                [(cat, float(row_data[f"{cat} %"].replace('%', ''))) 
-                 for cat in service_categories.keys()],
-                key=lambda x: x[1],
-                reverse=True
-            )[:3]
-            
-            row_data['Top Categories'] = '; '.join(
-                f"{cat} ({pct:.1f}%)" 
-                for cat, pct in top_categories 
-                if pct > 0
-            )
+                row_data[f"{category} %"] = percentage  # Store as number for averaging
+                row_data[f"{category} Spend"] = spend   # Store as number for averaging
             
             analysis_data.append(row_data)
             
         except Exception as e:
             print(f"Error processing {account_name}: {str(e)}")
             continue
-    
-    # Calculate industry average if we have data
-    if analysis_data:
-        avg_data = {
-            'Customer Name': 'Industry Average',
-            'Total Spend': f"${np.mean([float(d['Total Spend'].replace('$', '').replace(',', '')) for d in analysis_data]):,.2f}"
-        }
-        
-        # Calculate averages for each category
-        for category in service_categories.keys():
-            spends = [float(d[f"{category} Spend"].replace('$', '').replace(',', '')) for d in analysis_data]
-            avg_spend = np.mean(spends)
-            
-            total_avg_spend = float(avg_data['Total Spend'].replace('$', '').replace(',', ''))
-            percentage = (avg_spend / total_avg_spend * 100) if total_avg_spend > 0 else 0
-            
-            avg_data[f"{category} %"] = f"{percentage:.2f}%"
-            avg_data[f"{category} Spend"] = f"${avg_spend:,.2f}"
-        
-        # Add industry average top categories
-        top_categories = sorted(
-            [(cat, float(avg_data[f"{cat} %"].replace('%', ''))) 
-             for cat in service_categories.keys()],
-            key=lambda x: x[1],
-            reverse=True
-        )[:3]
-        
-        avg_data['Top Categories'] = '; '.join(
-            f"{cat} ({pct:.1f}%)" 
-            for cat, pct in top_categories 
-            if pct > 0
-        )
-        
-        analysis_data.append(avg_data)
-    
-    # Create DataFrame and sort by Total Spend
+
+    # Create DataFrame
     df_analysis = pd.DataFrame(analysis_data)
+    
+    # Calculate industry averages
+    avg_row = {
+        'Customer Name': 'Industry Average',
+        'Total Spend': f"${df_analysis['Total Spend'].apply(lambda x: float(x.replace('$', '').replace(',', ''))).mean():,.2f}"
+    }
+    
+    # Calculate averages for percentage and spend columns
+    for category in service_categories.keys():
+        # Percentage average
+        pct_col = f"{category} %"
+        avg_row[pct_col] = df_analysis[pct_col].mean()
+        
+        # Spend average
+        spend_col = f"{category} Spend"
+        avg_row[spend_col] = df_analysis[spend_col].mean()
+    
+    # Add industry average row to DataFrame
+    df_analysis = pd.concat([df_analysis, pd.DataFrame([avg_row])], ignore_index=True)
+    
+    # Format percentage and spend columns
+    for category in service_categories.keys():
+        # Format percentages
+        pct_col = f"{category} %"
+        df_analysis[pct_col] = df_analysis[pct_col].apply(lambda x: f"{float(x):.2f}%")
+        
+        # Format spend amounts
+        spend_col = f"{category} Spend"
+        df_analysis[spend_col] = df_analysis[spend_col].apply(lambda x: f"${float(x):,.2f}")
+    
+    # Add top categories for each row
+    df_analysis['Top Categories'] = df_analysis.apply(lambda row: get_top_categories(row, service_categories.keys()), axis=1)
     
     # Add category distribution score
     df_analysis['Category Distribution Score'] = df_analysis.apply(
@@ -920,14 +904,48 @@ def create_service_category_analysis(cleaned_data):
         axis=1
     )
     
-    # Sort by total spend
-    df_analysis['Total Spend Numeric'] = df_analysis['Total Spend'].apply(
-        lambda x: float(x.replace('$', '').replace(',', ''))
-    )
-    df_analysis = df_analysis.sort_values('Total Spend Numeric', ascending=False)
-    df_analysis = df_analysis.drop('Total Spend Numeric', axis=1)
-    
     return df_analysis
+
+def get_top_categories(row, categories):
+    """Get top 3 categories by percentage for a row"""
+    try:
+        category_percentages = []
+        for category in categories:
+            pct = float(str(row[f"{category} %"]).replace('%', ''))
+            if pct > 0:
+                category_percentages.append((category, pct))
+        
+        # Sort by percentage and get top 3
+        top_cats = sorted(category_percentages, key=lambda x: x[1], reverse=True)[:3]
+        return '; '.join(f"{cat} ({pct:.1f}%)" for cat, pct in top_cats)
+    except:
+        return "None"
+
+def calculate_industry_average(analysis_data):
+    """Calculate industry average from individual account data"""
+    avg_data = {
+        'Customer Name': 'Industry Average',
+        'Total Spend': f"${np.mean([float(d['Total Spend'].replace('$', '').replace(',', '')) for d in analysis_data]):,.2f}"
+    }
+    
+    # Calculate averages for each category
+    for key in analysis_data[0].keys():
+        if key not in ['Customer Name', 'Total Spend', 'Top Categories', 'Category Distribution Score']:
+            if 'Spend' in key:
+                values = [float(d[key].replace('$', '').replace(',', '')) for d in analysis_data]
+                avg_data[key] = f"${np.mean(values):,.2f}"
+            elif '%' in key:
+                values = [float(d[key].replace('%', '')) for d in analysis_data]
+                avg_data[key] = f"{np.mean(values):.2f}%"
+    
+    # Calculate top categories for industry average
+    spend_categories = [(cat.replace(' %', ''), float(avg_data[f"{cat.replace(' %', '')} %"].replace('%', '')))
+                       for cat in avg_data.keys() if '% %' in key]
+    top_cats = sorted(spend_categories, key=lambda x: x[1], reverse=True)[:3]
+    avg_data['Top Categories'] = '; '.join(f"{cat} ({pct:.1f}%)" for cat, pct in top_cats if pct > 0)
+    
+    return avg_data
+
 
 def calculate_category_distribution_score(row, categories):
     """Calculate the distribution score for service categories"""
