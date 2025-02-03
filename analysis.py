@@ -1,3 +1,4 @@
+
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -110,6 +111,7 @@ def get_service_domains():
         'Uncategorized': []
     }
 
+
 def clean_excel_data(excel_file_path):
     """Clean and standardize Excel data"""
     excel_file = pd.ExcelFile(excel_file_path)
@@ -182,17 +184,51 @@ def get_service_domain(service_name, domain_mapping):
             return domain
     return None
 
+def get_account_total_spend(df):
+    """Get total spend for an account from the first data row"""
+    try:
+        # Skip empty rows and headers
+        for idx, row in df.iterrows():
+            # Find the first non-empty row after headers
+            if pd.notna(row.iloc[0]) and isinstance(row.iloc[0], str):
+                if not row.iloc[0].startswith('Service group'):
+                    # Get value from "Last 12 months total" column
+                    total_spend_str = row.iloc[1]  # Column index 1 contains "Last 12 months total"
+                    # Clean and convert the value
+                    if isinstance(total_spend_str, str):
+                        total_spend = float(total_spend_str.replace('US$', '').replace(',', ''))
+                    else:
+                        total_spend = float(total_spend_str)
+                    account_name = row.iloc[0]
+                    print(f"Found total spend for {account_name}: ${total_spend:,.2f}")
+                    return total_spend
+        return 0.0
+    except Exception as e:
+        print(f"Error getting account total spend: {str(e)}")
+        return 0.0
+
 def analyze_service_domains(cleaned_data):
     """Analyze spending by service domain"""
     domain_mapping = get_service_domains()
     domain_totals = {domain: 0 for domain in domain_mapping.keys()}
     domain_accounts = {domain: set() for domain in domain_mapping.keys()}
     account_domain_spend = {}
+    account_totals = {}
     
+    # First pass - get account totals
+    for sheet_name, df in cleaned_data.items():
+        account_totals[sheet_name] = get_account_total_spend(df)
+    
+    # Store account totals in the account_domain_spend dictionary
+    for sheet_name in cleaned_data.keys():
+        account_domain_spend[sheet_name] = {
+            'total': account_totals[sheet_name],
+            'domains': {domain: 0 for domain in domain_mapping.keys()}
+        }
+    
+    # Second pass - process services
     for sheet_name, df in cleaned_data.items():
         try:
-            account_domain_spend[sheet_name] = {domain: 0 for domain in domain_mapping.keys()}
-            
             for idx, row in df.iterrows():
                 service_name = str(row.iloc[0])
                 if pd.isna(service_name) or 'View AWS service' in service_name:
@@ -204,13 +240,14 @@ def analyze_service_domains(cleaned_data):
                     if spend > 0:
                         domain_totals[domain] += spend
                         domain_accounts[domain].add(sheet_name)
-                        account_domain_spend[sheet_name][domain] += spend
-                    
+                        account_domain_spend[sheet_name]['domains'][domain] += spend
+        
         except Exception as e:
             print(f"Error processing {sheet_name}: {str(e)}")
     
+    # Create summary using actual account totals
     summary_data = []
-    total_spend = sum(domain_totals.values())
+    total_spend = sum(account_totals.values())
     
     for domain in domain_mapping.keys():
         spend = domain_totals[domain]
@@ -230,7 +267,7 @@ def analyze_service_domains(cleaned_data):
     df_summary = pd.DataFrame(summary_data)
     return df_summary.sort_values(
         'Total Spend',
-        key=lambda x: pd.to_numeric(x.str.replace('$', '').str.replace(',', ''), errors='coerce'),
+        key=lambda x: pd.to_numeric(x.str.replace('$', '').replace(',', ''), errors='coerce'),
         ascending=False
     ), account_domain_spend
 
@@ -242,9 +279,10 @@ def create_comparative_analysis(cleaned_data, account_domain_spend):
     
     for sheet_name, df in cleaned_data.items():
         try:
-            total_spend = sum(account_domain_spend[sheet_name].values())
+            total_spend = account_domain_spend[sheet_name]['total']  # Use stored total
             monthly_spends = []
             
+            # Calculate monthly spends
             for month in range(2, 14):
                 monthly_total = 0
                 for idx, row in df.iterrows():
@@ -253,7 +291,8 @@ def create_comparative_analysis(cleaned_data, account_domain_spend):
                         monthly_total += clean_amount(row.iloc[month])
                 monthly_spends.append(monthly_total)
             
-            domain_spends = account_domain_spend[sheet_name]
+            # Get domain spends
+            domain_spends = account_domain_spend[sheet_name]['domains']
             if domain_spends:
                 max_domain = max(domain_spends.items(), key=lambda x: x[1])
                 domain_concentration = (max_domain[1] / total_spend * 100) if total_spend > 0 else 0
@@ -261,6 +300,7 @@ def create_comparative_analysis(cleaned_data, account_domain_spend):
                 max_domain = ('None', 0)
                 domain_concentration = 0
             
+            # Calculate month-over-month changes
             mom_changes = []
             for i in range(1, len(monthly_spends)):
                 if monthly_spends[i-1] != 0:
@@ -276,9 +316,9 @@ def create_comparative_analysis(cleaned_data, account_domain_spend):
                 'Highest Spend Domain': max_domain[0],
                 'Domain Spend': max_domain[1],
                 'Domain Concentration %': domain_concentration,
-                'Max Monthly Spend': max(monthly_spends),
-                'Min Monthly Spend': min(monthly_spends),
-                'Spend Volatility': np.std(monthly_spends) if len(monthly_spends) > 0 else 0,
+                'Max Monthly Spend': max(monthly_spends) if monthly_spends else 0,
+                'Min Monthly Spend': min(monthly_spends) if monthly_spends else 0,
+                'Spend Volatility': np.std(monthly_spends) if monthly_spends else 0,
                 'Avg MoM Change %': np.mean(mom_changes) if mom_changes else 0
             })
             
@@ -306,16 +346,16 @@ def create_comparative_analysis(cleaned_data, account_domain_spend):
         df_trends[col] = df_trends[col].apply(lambda x: f"${x:,.2f}")
     
     return df_comparative, df_trends
+   
 
 def create_cumulative_report(cleaned_data, account_domain_spend):
     """Create detailed cumulative analysis report"""
     domain_mapping = get_service_domains()
     domains = list(domain_mapping.keys())
     cumulative_data = []
-    domain_spending_patterns = {domain: [] for domain in domains}
     
-    # Calculate overall totals
-    total_spend = sum(sum(account_spends.values()) for account_spends in account_domain_spend.values())
+    # Calculate overall totals using stored account totals
+    total_spend = sum(data['total'] for data in account_domain_spend.values())
     num_accounts = len(account_domain_spend)
     
     # Create summary row
@@ -330,8 +370,8 @@ def create_cumulative_report(cleaned_data, account_domain_spend):
     
     # Calculate domain totals
     domain_totals = {domain: 0 for domain in domains}
-    for account_spends in account_domain_spend.values():
-        for domain, spend in account_spends.items():
+    for account_data in account_domain_spend.values():
+        for domain, spend in account_data['domains'].items():
             domain_totals[domain] += spend
     
     # Add domain-specific fields to summary
@@ -348,8 +388,9 @@ def create_cumulative_report(cleaned_data, account_domain_spend):
     cumulative_data.append(summary_row)
     
     # Process each account
-    for account, domain_spends in account_domain_spend.items():
-        account_total = sum(domain_spends.values())
+    for account, data in account_domain_spend.items():
+        account_total = data['total']
+        domain_spends = data['domains']
         active_domains = sum(1 for v in domain_spends.values() if v > 0)
         
         # Calculate domain distribution score
@@ -379,8 +420,6 @@ def create_cumulative_report(cleaned_data, account_domain_spend):
             avg_spend = summary_row[f'{domain} Avg']
             account_row[f'{domain} Spend'] = spend
             account_row[f'{domain} vs Avg'] = ((spend - avg_spend) / avg_spend * 100) if avg_spend > 0 else 0
-            
-            domain_spending_patterns[domain].append(spend)
         
         cumulative_data.append(account_row)
     
@@ -399,8 +438,43 @@ def create_cumulative_report(cleaned_data, account_domain_spend):
         if col in df_cumulative.columns:
             df_cumulative[col] = df_cumulative[col].apply(lambda x: f"{x:.1f}%" if isinstance(x, (int, float)) else x)
     
-    return df_cumulative  # Make sure we return the DataFrame
+    return df_cumulative
 
+def calculate_category_distribution_score(row, categories):
+    """Calculate the distribution score for service categories"""
+    percentages = []
+    for category in categories:
+        try:
+            if f"{category} %" in row:
+                percentage = float(str(row[f"{category} %"]).replace('%', ''))
+                if percentage > 0:
+                    percentages.append(percentage)
+        except:
+            continue
+    
+    if percentages:
+        return round(100 - np.std(percentages), 2)
+    return 0.0
+
+
+def clean_amount_string(val):
+    """Helper function to clean and convert amount strings to float"""
+    try:
+        if pd.isna(val):
+            return 0.0
+        if isinstance(val, (int, float)):
+            return float(val)
+        val_str = str(val).lower()
+        if '(free tier)' in val_str:
+            return 0.0
+        # Remove currency symbols, commas and spaces
+        cleaned = val_str.replace('us$', '').replace('$', '').replace(',', '').replace(' ', '')
+        if cleaned == '-' or cleaned == '':
+            return 0.0
+        return float(cleaned)
+    except:
+        print(f"Warning: Could not convert '{val}' to float. Using 0.0")
+        return 0.0
 
 def analyze_monthly_patterns(cleaned_data, account_domain_spend):
     """Analyze monthly spending patterns and detect anomalies"""
@@ -414,14 +488,24 @@ def analyze_monthly_patterns(cleaned_data, account_domain_spend):
             'Service Patterns': {}
         }
         
+        # Get total spend from 'Last 12 months total'
+        total_row = df[df.iloc[:, 0].str.contains('total', case=False, na=False)]
+        if not total_row.empty:
+            total_spend = clean_amount_string(total_row.iloc[0]['Last 12 months total'])
+        else:
+            continue
+
         for domain in domain_mapping.keys():
+            domain_rows = df[df.apply(lambda row: get_service_domain(str(row.iloc[0]), domain_mapping) == domain, axis=1)]
+            if domain_rows.empty:
+                continue
+
+            # Get monthly spend for the domain
+            monthly_cols = [col for col in df.columns if any(month in col for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])]
             monthly_spend = []
-            for month in range(2, 14):
-                month_total = 0
-                for idx, row in df.iterrows():
-                    service_name = str(row.iloc[0])
-                    if domain == get_service_domain(service_name, domain_mapping):
-                        month_total += clean_amount(row.iloc[month])
+            
+            for month in monthly_cols:
+                month_total = sum(clean_amount_string(val) for val in domain_rows[month])
                 monthly_spend.append(month_total)
             
             if sum(monthly_spend) > 0:
@@ -728,86 +812,115 @@ def format_excel_with_highlights(worksheet, sheet_name=''):
 def create_service_category_analysis(cleaned_data):
     """Create analysis of service category percentages for each customer"""
     
-    # Define all service categories
-    service_categories = {
-        'Analytics Services': ['Analytics', 'EMR', 'Athena', 'QuickSight', 'Glue', 'Kinesis Analytics', 'Lake Formation'],
-        'Automation and Messaging Group': ['SNS', 'SQS', 'EventBridge', 'MQ', 'Step Functions'],
-        'Compute Services': ['EC2', 'ECS', 'EKS', 'Fargate', 'Lambda', 'Compute', 'NAT Gateway', 'Elastic Load Balancing'],
-        'DB Services': ['RDS', 'DynamoDB', 'Elasticache', 'Aurora', 'Database', 'MySQL', 'PostgreSQL'],
-        'Developer Tools': ['CodeBuild', 'CodePipeline', 'CodeDeploy', 'CodeCommit', 'Cloud9'],
-        'Edge': ['CloudFront', 'Route53', 'Edge Location', 'CDN'],
-        'Identity Services': ['IAM', 'Directory Service', 'Cognito', 'SSO'],
-        'Machine Learning & Deep Learning': ['SageMaker', 'Rekognition', 'Comprehend', 'Textract', 'Forecast'],
-        'Management Tools': ['CloudTrail', 'Config', 'SSM', 'Systems Manager', 'OpsWorks', 'Control Tower'],
-        'Marketplaces': ['AWS Marketplace', 'Marketplace'],
-        'Marketplaces/Control Services': ['AWS Control Services', 'Service Catalog'],
-        'Migration-Services': ['Migration', 'Transfer', 'DataSync'],
-        'Mobile Services': ['Mobile Hub', 'AppSync', 'Device Farm'],
-        'Monitoring Services': ['CloudWatch', 'Monitoring', 'Logs', 'Metrics', 'Events'],
-        'Networking Bandwidth Services': ['VPC', 'Direct Connect', 'Transit Gateway', 'PrivateLink'],
-        'Others': ['Other'],
-        'Productivity Applications': ['WorkSpaces', 'WorkDocs', 'Chime', 'Connect'],
-        'Professional Services/Training': ['Professional Services', 'Training', 'Support'],
-        'Security Services': ['GuardDuty', 'KMS', 'Security', 'WAF', 'Shield', 'Firewall'],
-        'Storage': ['S3', 'EBS', 'EFS', 'Storage', 'Glacier', 'Backup'],
-        'Streaming Services': ['Kinesis', 'Media Services', 'Elemental'],
-        'Support Services': ['AWS Support', 'Premium Support'],
-        'Uncategorized': []
-    }
+    # Use existing service domains function
+    service_categories = get_service_domains()
 
     analysis_data = []
     
     for account_name, df in cleaned_data.items():
-        if account_name == 'Industry Average':
+        try:
+            if account_name == 'Industry Average':
+                continue
+                
+            # Get total spend from first data row
+            total_spend = get_account_total_spend(df)
+            print(f"Processing {account_name} with total spend: ${total_spend:,.2f}")
+            
+            # Initialize category spending
+            category_spend = {category: 0 for category in service_categories.keys()}
+            
+            # Process each service row
+            for idx, row in df.iterrows():
+                service_name = str(row.iloc[0])
+                if pd.isna(service_name) or 'View AWS service' in service_name:
+                    continue
+                    
+                spend = clean_amount(row.iloc[1])
+                
+                # Use the same domain matching logic as in analyze_service_domains
+                domain = get_service_domain(service_name, service_categories)
+                if domain:
+                    category_spend[domain] += spend
+                else:
+                    category_spend['Uncategorized'] += spend
+            
+            # Calculate percentages and create row data
+            row_data = {
+                'Customer Name': account_name,
+                'Total Spend': f"${total_spend:,.2f}"
+            }
+            
+            # Add percentage and spend for each category
+            for category in service_categories.keys():
+                spend = category_spend[category]
+                percentage = (spend / total_spend * 100) if total_spend > 0 else 0
+                row_data[f"{category} %"] = f"{percentage:.2f}%"
+                row_data[f"{category} Spend"] = f"${spend:,.2f}"
+            
+            # Add top categories
+            top_categories = sorted(
+                [(cat, float(row_data[f"{cat} %"].replace('%', ''))) 
+                 for cat in service_categories.keys()],
+                key=lambda x: x[1],
+                reverse=True
+            )[:3]
+            
+            row_data['Top Categories'] = '; '.join(
+                f"{cat} ({pct:.1f}%)" 
+                for cat, pct in top_categories 
+                if pct > 0
+            )
+            
+            analysis_data.append(row_data)
+            
+        except Exception as e:
+            print(f"Error processing {account_name}: {str(e)}")
             continue
-            
-        total_spend = 0
-        category_spend = {category: 0 for category in service_categories.keys()}
-        
-        # Calculate spending for each service
-        for idx, row in df.iterrows():
-            service_name = str(row.iloc[0]).lower()
-            spend = clean_amount(row.iloc[1])
-            total_spend += spend
-            
-            # Categorize spending
-            categorized = False
-            for category, services in service_categories.items():
-                if any(service.lower() in service_name for service in services):
-                    category_spend[category] += spend
-                    categorized = True
-                    break
-            
-            if not categorized:
-                category_spend['Uncategorized'] += spend
-        
-        # Calculate percentages
-        row_data = {
-            'Customer Name': account_name,
-            'Total Spend': f"${total_spend:,.2f}"
-        }
-        
-        for category in service_categories.keys():
-            percentage = (category_spend[category] / total_spend * 100) if total_spend > 0 else 0
-            row_data[f"{category} %"] = f"{percentage:.2f}%"
-        
-        analysis_data.append(row_data)
     
-    # Calculate industry average
+    # Calculate industry average if we have data
     if analysis_data:
         avg_data = {
             'Customer Name': 'Industry Average',
             'Total Spend': f"${np.mean([float(d['Total Spend'].replace('$', '').replace(',', '')) for d in analysis_data]):,.2f}"
         }
         
+        # Calculate averages for each category
         for category in service_categories.keys():
-            percentages = [float(d[f"{category} %"].replace('%', '')) for d in analysis_data]
-            avg_data[f"{category} %"] = f"{np.mean(percentages):.2f}%"
+            spends = [float(d[f"{category} Spend"].replace('$', '').replace(',', '')) for d in analysis_data]
+            avg_spend = np.mean(spends)
+            
+            total_avg_spend = float(avg_data['Total Spend'].replace('$', '').replace(',', ''))
+            percentage = (avg_spend / total_avg_spend * 100) if total_avg_spend > 0 else 0
+            
+            avg_data[f"{category} %"] = f"{percentage:.2f}%"
+            avg_data[f"{category} Spend"] = f"${avg_spend:,.2f}"
+        
+        # Add industry average top categories
+        top_categories = sorted(
+            [(cat, float(avg_data[f"{cat} %"].replace('%', ''))) 
+             for cat in service_categories.keys()],
+            key=lambda x: x[1],
+            reverse=True
+        )[:3]
+        
+        avg_data['Top Categories'] = '; '.join(
+            f"{cat} ({pct:.1f}%)" 
+            for cat, pct in top_categories 
+            if pct > 0
+        )
         
         analysis_data.append(avg_data)
     
     # Create DataFrame and sort by Total Spend
     df_analysis = pd.DataFrame(analysis_data)
+    
+    # Add category distribution score
+    df_analysis['Category Distribution Score'] = df_analysis.apply(
+        lambda row: calculate_category_distribution_score(row, service_categories.keys()), 
+        axis=1
+    )
+    
+    # Sort by total spend
     df_analysis['Total Spend Numeric'] = df_analysis['Total Spend'].apply(
         lambda x: float(x.replace('$', '').replace(',', ''))
     )
@@ -815,6 +928,53 @@ def create_service_category_analysis(cleaned_data):
     df_analysis = df_analysis.drop('Total Spend Numeric', axis=1)
     
     return df_analysis
+
+def calculate_category_distribution_score(row, categories):
+    """Calculate the distribution score for service categories"""
+    try:
+        percentages = []
+        for category in categories:
+            if f"{category} %" in row:
+                percentage = float(str(row[f"{category} %"]).replace('%', ''))
+                if percentage > 0:
+                    percentages.append(percentage)
+        
+        if percentages:
+            # Higher score means more even distribution
+            return round(100 - np.std(percentages), 2)
+        return 0.0
+    except Exception as e:
+        print(f"Error calculating distribution score: {str(e)}")
+        return 0.0
+
+
+def calculate_distribution_score(row, percentage_cols):
+    """Calculate a score representing how well-distributed the spending is across categories"""
+    try:
+        percentages = [float(str(row[col]).replace('%', '')) for col in percentage_cols]
+        non_zero = [p for p in percentages if p > 0]
+        if not non_zero:
+            return "0.00"
+        
+        # Calculate Gini coefficient (0 = perfect distribution, 1 = complete concentration)
+        gini = 1 - (1 / len(non_zero)) * (2 * sum((i+1) * v for i, v in enumerate(sorted(non_zero))) / sum(non_zero) - (len(non_zero) + 1))
+        
+        # Convert to distribution score (100 = perfect distribution, 0 = complete concentration)
+        score = (1 - gini) * 100
+        return f"{score:.2f}"
+    except:
+        return "0.00"
+
+def get_top_categories(row, percentage_cols):
+    """Get the top 3 categories by percentage"""
+    try:
+        categories = [(col.replace(' %', ''), float(str(row[col]).replace('%', ''))) 
+                     for col in percentage_cols]
+        top_cats = sorted(categories, key=lambda x: x[1], reverse=True)[:3]
+        return '; '.join(f"{cat} ({pct:.1f}%)" for cat, pct in top_cats if pct > 0)
+    except:
+        return "None"
+
 
 def save_analysis_to_excel(output_file, df_summary, df_comparative, df_trends, df_monthly_trends, df_cumulative, cleaned_data):
     """Save all analysis results to Excel file with comprehensive formatting"""
@@ -893,26 +1053,66 @@ def format_service_category_sheet(worksheet):
 
 def save_analysis_to_excel(output_file, df_summary, df_comparative, df_trends, df_monthly_trends, df_cumulative, cleaned_data):
     """Save all analysis results to Excel file with comprehensive formatting"""
-    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-        # Create service category analysis
-        print("Creating Service Category Analysis...")
-        df_service_categories = create_service_category_analysis(cleaned_data)
+    try:
+        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            # Create service category analysis
+            print("Creating Service Category Analysis...")
+            df_service_categories = create_service_category_analysis(cleaned_data)
+            
+            # Save sheets, checking for None values
+            sheets_to_save = {
+                'Domain Summary': df_summary,
+                'Account Comparison': df_comparative,
+                'Monthly Trends': df_trends,
+                'Detailed Analysis': df_monthly_trends,
+                'Cumulative Analysis': df_cumulative
+            }
+            
+            # Add service categories if available
+            if df_service_categories is not None:
+                sheets_to_save['Service Categories'] = df_service_categories
+            
+            # Save each sheet that has data
+            sheets_saved = 0
+            for sheet_name, df in sheets_to_save.items():
+                if df is not None and not df.empty:
+                    print(f"Saving {sheet_name} sheet...")
+                    if sheet_name == 'Monthly Trends':
+                        df.to_excel(writer, sheet_name=sheet_name, index=True)
+                    else:
+                        df.to_excel(writer, sheet_name=sheet_name, index=False)
+                    sheets_saved += 1
+            
+            # If no sheets were saved, create a dummy sheet to prevent Excel errors
+            if sheets_saved == 0:
+                print("Warning: No data to save. Creating empty summary sheet.")
+                pd.DataFrame({'No Data': ['No analysis results available']}).to_excel(
+                    writer, sheet_name='Summary', index=False
+                )
+            
+            # Format sheets
+            workbook = writer.book
+            for sheet_name in workbook.sheetnames:
+                if sheet_name == 'Service Categories' and df_service_categories is not None:
+                    format_service_category_sheet(workbook[sheet_name])
+                else:
+                    format_excel_with_highlights(workbook[sheet_name], sheet_name)
+            
+            print(f"Successfully saved {sheets_saved} sheets to {output_file}")
+    
+    except Exception as e:
+        print(f"Error saving Excel file: {str(e)}")
+        print("Attempting to save with minimal formatting...")
         
-        # Save all sheets
-        df_service_categories.to_excel(writer, sheet_name='Service Categories', index=False)
-        df_summary.to_excel(writer, sheet_name='Domain Summary', index=False)
-        df_comparative.to_excel(writer, sheet_name='Account Comparison', index=False)
-        df_trends.to_excel(writer, sheet_name='Monthly Trends', index=True)
-        df_monthly_trends.to_excel(writer, sheet_name='Detailed Analysis', index=False)
-        df_cumulative.to_excel(writer, sheet_name='Cumulative Analysis', index=False)
-        
-        # Format all sheets
-        workbook = writer.book
-        for sheet_name in workbook.sheetnames:
-            if sheet_name == 'Service Categories':
-                format_service_category_sheet(workbook[sheet_name])
+        # Fallback save with minimal formatting
+        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            if df_summary is not None and not df_summary.empty:
+                df_summary.to_excel(writer, sheet_name='Summary', index=False)
             else:
-                format_excel_with_highlights(workbook[sheet_name], sheet_name)
+                pd.DataFrame({'Error': ['Error occurred during analysis']}).to_excel(
+                    writer, sheet_name='Summary', index=False
+                )
+
 
 if __name__ == "__main__":
     try:
