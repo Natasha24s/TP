@@ -339,7 +339,7 @@ def create_database_services_summary(account_domain_spend):
                 
                 if spend > 0:
                     # Explicitly check for serverless services
-                    if (‘aurora' in service.lower() and 'serverless' in service.lower()) or \
+                    if ('aurora' in service.lower() and 'serverless' in service.lower()) or \
                        'dynamodb' in service.lower() or \
                        'ddb' in service.lower() or \
                        'elasticache' in service.lower() or \
@@ -979,7 +979,7 @@ def clean_amount_string(val):
         return 0.0
 
 def analyze_monthly_patterns(cleaned_data, account_domain_spend):
-    """Analyze monthly spending patterns using direct data from MyPodData.xlsx"""
+    """Analyze monthly spending patterns using direct data from MyPodDataP2.xlsx"""
     monthly_patterns = []
     
     for sheet_name, df in cleaned_data.items():
