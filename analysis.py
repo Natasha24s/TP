@@ -824,38 +824,32 @@ def create_service_category_analysis(cleaned_data):
     
     for account_name, df in cleaned_data.items():
         try:
-            # Get total spend from first data row
             total_spend = get_account_total_spend(df)
             print(f"Processing {account_name} with total spend: ${total_spend:,.2f}")
             
-            # Initialize category spending
             category_spend = {category: 0 for category in service_categories.keys()}
             
-            # Process each row
             for idx, row in df.iterrows():
                 service_name = str(row.iloc[0])
                 if pd.isna(service_name) or 'View AWS service' in service_name:
                     continue
                 
-                # Check if this row is a domain header by exact match
                 for domain in service_categories.keys():
                     if service_name == domain:
-                        spend = clean_amount(row.iloc[1])  # Get spend from column 2
+                        spend = clean_amount(row.iloc[1])
                         category_spend[domain] = spend
                         break
             
-            # Calculate row data
             row_data = {
                 'Customer Name': account_name,
-                'Total Spend': f"${total_spend:,.2f}"
+                'Total Spend': total_spend  # Store as number for comparison
             }
             
-            # Add percentage and spend for each category
             for category in service_categories.keys():
                 spend = category_spend[category]
                 percentage = (spend / total_spend * 100) if total_spend > 0 else 0
-                row_data[f"{category} %"] = percentage  # Store as number for averaging
-                row_data[f"{category} Spend"] = spend   # Store as number for averaging
+                row_data[f"{category} %"] = percentage
+                row_data[f"{category} Spend"] = spend
             
             analysis_data.append(row_data)
             
@@ -866,39 +860,62 @@ def create_service_category_analysis(cleaned_data):
     # Create DataFrame
     df_analysis = pd.DataFrame(analysis_data)
     
-    # Calculate industry averages
+    # Calculate averages before adding the average row
+    spend_avg = df_analysis['Total Spend'].mean()
+    category_avgs = {}
+    for category in service_categories.keys():
+        category_avgs[f"{category} %"] = df_analysis[f"{category} %"].mean()
+        category_avgs[f"{category} Spend"] = df_analysis[f"{category} Spend"].mean()
+    
+    # Add industry average row
     avg_row = {
         'Customer Name': 'Industry Average',
-        'Total Spend': f"${df_analysis['Total Spend'].apply(lambda x: float(x.replace('$', '').replace(',', ''))).mean():,.2f}"
+        'Total Spend': spend_avg
     }
-    
-    # Calculate averages for percentage and spend columns
-    for category in service_categories.keys():
-        # Percentage average
-        pct_col = f"{category} %"
-        avg_row[pct_col] = df_analysis[pct_col].mean()
-        
-        # Spend average
-        spend_col = f"{category} Spend"
-        avg_row[spend_col] = df_analysis[spend_col].mean()
-    
-    # Add industry average row to DataFrame
+    avg_row.update({k: v for k, v in category_avgs.items()})
     df_analysis = pd.concat([df_analysis, pd.DataFrame([avg_row])], ignore_index=True)
     
-    # Format percentage and spend columns
+    # Format cells with conditional bold styling
     for category in service_categories.keys():
-        # Format percentages
+        # Format percentages with bold for above average
         pct_col = f"{category} %"
-        df_analysis[pct_col] = df_analysis[pct_col].apply(lambda x: f"{float(x):.2f}%")
+        df_analysis[pct_col] = df_analysis.apply(
+            lambda row: format_with_bold(
+                row[pct_col], 
+                category_avgs[pct_col],
+                is_percentage=True
+            ) if row['Customer Name'] != 'Industry Average' else f"{row[pct_col]:.2f}%",
+            axis=1
+        )
         
-        # Format spend amounts
+        # Format spend amounts with bold for above average
         spend_col = f"{category} Spend"
-        df_analysis[spend_col] = df_analysis[spend_col].apply(lambda x: f"${float(x):,.2f}")
+        df_analysis[spend_col] = df_analysis.apply(
+            lambda row: format_with_bold(
+                row[spend_col], 
+                category_avgs[spend_col],
+                is_percentage=False
+            ) if row['Customer Name'] != 'Industry Average' else f"${row[spend_col]:,.2f}",
+            axis=1
+        )
     
-    # Add top categories for each row
-    df_analysis['Top Categories'] = df_analysis.apply(lambda row: get_top_categories(row, service_categories.keys()), axis=1)
+    # Format total spend with bold for above average
+    df_analysis['Total Spend'] = df_analysis.apply(
+        lambda row: format_with_bold(
+            row['Total Spend'], 
+            spend_avg,
+            is_percentage=False
+        ) if row['Customer Name'] != 'Industry Average' else f"${row['Total Spend']:,.2f}",
+        axis=1
+    )
     
-    # Add category distribution score
+    # Add top categories
+    df_analysis['Top Categories'] = df_analysis.apply(
+        lambda row: get_top_categories(row, service_categories.keys()), 
+        axis=1
+    )
+    
+    # Add distribution score
     df_analysis['Category Distribution Score'] = df_analysis.apply(
         lambda row: calculate_category_distribution_score(row, service_categories.keys()), 
         axis=1
@@ -906,16 +923,30 @@ def create_service_category_analysis(cleaned_data):
     
     return df_analysis
 
+def format_with_bold(value, average, is_percentage=False):
+    """Format value with bold HTML if above average"""
+    if isinstance(value, str):
+        value = float(value.replace('$', '').replace(',', '').replace('%', ''))
+    
+    if is_percentage:
+        formatted = f"{value:.2f}%"
+    else:
+        formatted = f"${value:,.2f}"
+    
+    if value > average:
+        return f"<b>{formatted}</b>"
+    return formatted
+
 def get_top_categories(row, categories):
-    """Get top 3 categories by percentage for a row"""
+    """Get top 3 categories by percentage"""
     try:
         category_percentages = []
         for category in categories:
-            pct = float(str(row[f"{category} %"]).replace('%', ''))
+            pct_str = str(row[f"{category} %"])
+            pct = float(pct_str.replace('<b>', '').replace('</b>', '').replace('%', ''))
             if pct > 0:
                 category_percentages.append((category, pct))
         
-        # Sort by percentage and get top 3
         top_cats = sorted(category_percentages, key=lambda x: x[1], reverse=True)[:3]
         return '; '.join(f"{cat} ({pct:.1f}%)" for cat, pct in top_cats)
     except:
