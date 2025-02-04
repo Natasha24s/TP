@@ -6,111 +6,605 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Color
 import os
 import warnings
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, Alignment, PatternFill, Color
+from openpyxl.styles.differential import DifferentialStyle
+from openpyxl.formatting.rule import ColorScaleRule, Rule
+from openpyxl.styles.fills import PatternFill
 
 # Suppress specific warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 def get_service_domains():
-    """Return list of service domains and their associated services"""
+    """Return list of service domains and their associated services from the input file"""
     return {
         'Analytics Services': [
             'EMR', 'Athena', 'Analytics', 'Glue', 'QuickSight', 'Redshift',
-            'Kinesis Analytics', 'Lake Formation', 'Data Pipeline', 'OpenSearch'
+            'Kinesis Analytics', 'Lake Formation', 'Data Pipeline', 'OpenSearch',
+            'Open Source Data Analytics', 'Glue & Lake Formation'
         ],
         'Automation and Messaging Group': [
-            'SNS', 'SQS', 'EventBridge', 'MQ', 'Step Functions', 'Simple Queue Service',
-            'Simple Notification Service', 'Amazon MQ', 'AWS Step Functions'
+            'SNS', 'SQS', 'EventBridge', 'MQ', 'Step Functions', 'CW Events',
+            'Simple Queue Service', 'Simple Notification Service', 'Amazon MQ',
+            'AWS Step Functions', 'Pinwheel'
         ],
         'Compute Services': [
-            'EC2', 'ECS', 'EKS', 'Fargate', 'Lambda', 'Compute', 'Container',
-            'NAT Gateway', 'Elastic Load Balancing', 'Load Balancer', 'Elastic Compute',
-            'Elastic Container', 'Elastic Kubernetes', 'AWS Lambda', 'Savings Plan'
+            'EC2', 'EC2 - Linux', 'EC2 - Windows', 'EC2 - Bandwidth',
+            'Elastic Load Balancing', 'Load Balancer', 'NAT Gateway',
+            'Public IPv4 Address', 'Containers', 'EKS', 'ECR',
+            'Elastic Load Balancing - ALB', 'Elastic Load Balancing - NLB',
+            'Elastic Load Balancing - CLB'
         ],
         'DB Services': [
-            'RDS', 'DynamoDB', 'Elasticache', 'Aurora', 'Database', 'DDB',
-            'MySQL', 'PostgreSQL', 'MariaDB', 'SQL Server', 'Neptune', 'DocumentDB',
-            'Relational Database', 'NoSQL', 'Redis', 'Memcached'
+            'RDS', 'DynamoDB', 'Elasticache', 'Aurora', 'DDB',
+            'Relational Database Services', 'Aurora MySQL', 'Aurora PostgreSQL',
+            'RDS MySQL', 'RDS PostgreSQL', 'RDS MariaDB', 'RDS Storage',
+            'Aurora MySQL Serverless v2'
         ],
         'Developer Tools': [
             'CodeBuild', 'CodePipeline', 'CodeDeploy', 'CodeCommit', 'Cloud9',
-            'CodeStar', 'CodeArtifact', 'CodeGuru', 'X-Ray', 'Developer Tools'
+            'CodeStar', 'CodeArtifact', 'CodeGuru', 'X-Ray', 'CloudFormation',
+            'AWS CodeSuite and IDEs', 'Infra-as-Code'
         ],
         'Edge': [
-            'CloudFront', 'Route53', 'PerimeterProtection', 'Edge', 'CDN',
-            'DNS', 'Cloud Front', 'Global Accelerator', 'Route 53'
+            'CloudFront', 'Route53', 'PerimeterProtection', 'Cloud Front',
+            'Global Accelerator', 'Route 53'
         ],
         'Identity Services': [
             'IAM', 'Directory Service', 'Cognito', 'SSO', 'Single Sign-On',
-            'Identity Center', 'Resource Access Manager', 'AWS Organizations'
+            'Identity Center', 'Resource Access Manager', 'AWS Organizations',
+            'AWS Directory Service'
         ],
         'Machine Learning & Deep Learning': [
-            'SageMaker', 'Rekognition', 'Comprehend', 'ML', 'AI', 'Deep Learning',
-            'Forecast', 'Textract', 'Polly', 'Transcribe', 'Bedrock', 'Lex',
-            'Personalize', 'Translate', 'DeepLens', 'DeepRacer'
-        ],
-        'Management Tools': [
-            'CloudTrail', 'Config', 'SSM', 'Management', 'Systems Manager',
-            'OpsWorks', 'Service Catalog', 'Control Tower', 'License Manager',
-            'Managed Services', 'CloudFormation', 'Auto Scaling'
-        ],
-        'Marketplaces': [
-            'AWS Marketplace', 'Marketplace Subscriptions', 'Marketplace Entitlements',
-            'Developer Marketplace'
-        ],
-        'Marketplaces/Control Services': [
-            'AWS Control Services', 'Service Catalog', 'Control Tower',
-            'AWS Organizations', 'AWS Control Tower'
-        ],
-        'Migration-Services': [
-            'Migration', 'Transfer', 'DataSync', 'Application Discovery',
-            'Database Migration', 'Server Migration', 'Migration Hub'
-        ],
-        'Mobile Services': [
-            'Mobile Hub', 'AppSync', 'Device Farm', 'Amplify', 'API Gateway',
-            'Mobile Analytics'
+            'SageMaker', 'Rekognition', 'Comprehend', 'Textract', 'Polly',
+            'Transcribe', 'Bedrock', 'Lex', 'Translate', 'QuickSight',
+            'Total Marketing Intelligence', 'Amazon Q Business'
         ],
         'Monitoring Services': [
-            'CloudWatch', 'Monitoring', 'Logs', 'Metrics', 'Events',
-            'Performance', 'Application Insights', 'Synthetics'
+            'CloudWatch', 'CW', 'CloudTrail', 'Config', 'Managed Services',
+            'AWS Health', 'Systems Manager', 'SSM', 'Control Tower',
+            'AWS Managed Services', 'Service Catalog', 'License Manager',
+            'AWS Systems Manager', 'AWS CloudWatch', 'AWS Config'
         ],
-        'Networking Bandwidth Services': [
-            'Data Transfer', 'DTO', 'DTIR', 'Bandwidth', 'Network',
-            'PrivateLink', 'Transit Gateway', 'VPC', 'Direct Connect',
-            'Virtual Private Network', 'Elastic Load Balancing'
-        ],
-        'Others': [
-            'Other', 'Miscellaneous', 'Additional Services'
-        ],
-        'Productivity Applications': [
-            'WorkSpaces', 'WorkDocs', 'Chime', 'Connect', 'Communication',
-            'Productivity', 'Workmail', 'AppStream', 'WorkLink'
-        ],
-        'Professional Services/Training': [
-            'Professional Services', 'Training', 'Support', 'Consulting',
-            'AWS Training', 'Technical Support', 'Business Support',
-            'Enterprise Support', 'AWS Certification'
+        'Management Tools': [
+            'CloudTrail', 'Config', 'SSM', 'Systems Manager', 'CloudFormation',
+            'Auto Scaling'
         ],
         'Security Services': [
-            'GuardDuty', 'KMS', 'Security', 'Inspector', 'IAM', 'Certificate',
-            'Firewall', 'WAF', 'Shield', 'Secrets Manager', 'ESS', 'Macie',
-            'Security Hub', 'Detective', 'Network Firewall', 'ACM'
+            'GuardDuty', 'KMS', 'Inspector', 'Certificate', 'Firewall', 
+            'WAF', 'Shield', 'Secrets Manager', 'ESS', 'Macie',
+            'Security Hub', 'Detective', 'Network Firewall', 'ACM',
+            'GuardDuty Services', 'ESS Overbridge', 'Key Management Service',
+            'AWS Secrets Manager', 'Inspector Services Group'
         ],
         'Storage': [
             'S3', 'EBS', 'EFS', 'Storage', 'Glacier', 'Elastic Block Store',
-            'Backup', 'Transfer', 'FSx', 'Storage Gateway', 'Simple Storage Service'
+            'FSx', 'Storage Gateway', 'Simple Storage Service', 'EFS Total',
+            'AWS Backup', 'AWS Transfer'
         ],
         'Streaming Services': [
             'Kinesis', 'SNS', 'SQS', 'EventBridge', 'MQ', 'Streaming',
-            'Message Queue', 'Notification', 'Data Streams', 'Firehose',
-            'Video Streams', 'Amazon MSK'
-        ],
-        'Support Services': [
-            'AWS Support', 'Premium Support', 'Basic Support', 'Developer Support',
-            'Business Support', 'Enterprise Support'
-        ],
-        'Uncategorized': []
+            'Message Queue', 'Data Streams', 'Firehose', 'Video Streams',
+            'Amazon MSK', 'Kinesis Data Firehose'
+        ]
     }
 
+
+def create_overall_summary(cleaned_data, account_domain_spend):
+    """Create overall summary dataframe"""
+    total_accounts = len(cleaned_data)
+    total_spend = sum(data['total'] for data in account_domain_spend.values())
+    avg_yearly = total_spend / total_accounts if total_accounts > 0 else 0
+    avg_monthly = avg_yearly / 12
+    total_monthly = total_spend / 12
+    yearly_spends = [data['total'] for data in account_domain_spend.values()]
+    lowest_yearly = min(yearly_spends) if yearly_spends else 0
+    highest_yearly = max(yearly_spends) if yearly_spends else 0
+    
+    summary_data = {
+        'Metric': [
+            'Total Number of Accounts',
+            'Total AWS Spend (All Accounts, 12 months)',
+            'Average Yearly Spend per Account',
+            'Average Monthly Spend per Account',
+            'Total Monthly Spend (All Accounts)',
+            'Lowest Yearly Spend',
+            'Highest Yearly Spend'
+        ],
+        'Value': [
+            total_accounts,
+            f"${total_spend:,.2f}",
+            f"${avg_yearly:,.2f}",
+            f"${avg_monthly:,.2f}",
+            f"${total_monthly:,.2f}",
+            f"${lowest_yearly:,.2f}",
+            f"${highest_yearly:,.2f}"
+        ]
+    }
+    
+    return pd.DataFrame(summary_data)
+
+def create_compute_services_summary(account_domain_spend):
+    """Create Compute services summary dataframe"""
+    compute_data = []
+    compute_usage_pcts = []
+    
+    for account_name, data in account_domain_spend.items():
+        total_spend = data['total']
+        compute_spend = data['domains'].get('Compute Services', 0)
+        compute_pct = (compute_spend / total_spend * 100) if total_spend > 0 else 0
+        compute_usage_pcts.append((account_name, compute_pct))
+        
+        # Get the primary services and their spends
+        primary_services = get_primary_compute_services(cleaned_data.get(account_name))
+        
+        # Calculate core compute percentage (EC2 Linux + EC2 Windows)
+        core_compute_spend = 0
+        if cleaned_data.get(account_name) is not None:
+            for _, row in cleaned_data[account_name].iterrows():
+                service = str(row.iloc[0])
+                if 'EC2 - Linux' in service or 'EC2 - Windows' in service:
+                    core_compute_spend += clean_amount(row.iloc[1])
+        
+        core_compute_pct = (core_compute_spend / total_spend * 100) if total_spend > 0 else 0
+        
+        compute_data.append({
+            'Customer Name': account_name,
+            'Total Spend': f"${total_spend:,.2f}",
+            'Compute Services Total': f"${compute_spend:,.2f}",
+            'Compute Services %': f"{compute_pct:.2f}%",
+            'Core Compute %': f"{core_compute_pct:.2f}%",
+            'Primary Compute Services': primary_services
+        })
+    
+    highest_compute = max(compute_usage_pcts, key=lambda x: x[1]) if compute_usage_pcts else ('None', 0)
+    avg_compute = sum(pct for _, pct in compute_usage_pcts) / len(compute_usage_pcts) if compute_usage_pcts else 0
+    
+    # Create summary section
+    compute_summary_rows = pd.DataFrame({
+        'Customer Name': [
+            'Compute Services Analysis Summary',
+            '',
+            'Total Customers Using Compute',
+            'Highest Compute Usage',
+            'Average Compute Usage',
+            'Most Common Services',
+            ''
+        ],
+        'Total Spend': [
+            '',
+            '',
+            str(sum(1 for _, pct in compute_usage_pcts if pct > 0)),
+            f"{highest_compute[1]:.2f}% ({highest_compute[0]})",
+            f"{avg_compute:.2f}%",
+            get_most_common_compute_services(cleaned_data),
+            ''
+        ],
+        'Compute Services Total': [''] * 7,
+        'Compute Services %': [''] * 7,
+        'Core Compute %': [''] * 7,
+        'Primary Compute Services': [''] * 7
+    })
+    
+    # Combine summary and details
+    df_compute = pd.concat([compute_summary_rows, pd.DataFrame(compute_data)], ignore_index=True)
+    
+    return df_compute
+
+def create_storage_services_summary(account_domain_spend):
+    """Create Storage services summary dataframe"""
+    storage_data = []
+    storage_usage_pcts = []
+    
+    for account_name, data in account_domain_spend.items():
+        total_spend = data['total']
+        storage_spend = data['domains'].get('Storage', 0)
+        storage_pct = (storage_spend / total_spend * 100) if total_spend > 0 else 0
+        storage_usage_pcts.append((account_name, storage_pct))
+        
+        storage_data.append({
+            'Customer Name': account_name,
+            'Total Spend': f"${total_spend:,.2f}",
+            'Storage Services Total': f"${storage_spend:,.2f}",
+            'Storage Services %': f"{storage_pct:.2f}%",
+            'Primary Storage Services': get_primary_storage_services(cleaned_data.get(account_name))
+        })
+    
+    highest_storage = max(storage_usage_pcts, key=lambda x: x[1]) if storage_usage_pcts else ('None', 0)
+    avg_storage = sum(pct for _, pct in storage_usage_pcts) / len(storage_usage_pcts) if storage_usage_pcts else 0
+    
+    storage_summary_rows = pd.DataFrame({
+        'Customer Name': [
+            'Storage Services Analysis Summary',
+            '',
+            'Total Customers Using Storage',
+            'Highest Storage Usage',
+            'Average Storage Usage',
+            'Most Common Services',
+            ''
+        ],
+        'Total Spend': [
+            '',
+            '',
+            str(sum(1 for _, pct in storage_usage_pcts if pct > 0)),
+            f"{highest_storage[1]:.2f}% ({highest_storage[0]})",
+            f"{avg_storage:.2f}%",
+            get_most_common_storage_services(cleaned_data),
+            ''
+        ],
+        'Storage Services Total': [''] * 7,
+        'Storage Services %': [''] * 7,
+        'Primary Storage Services': [''] * 7
+    })
+    
+    return pd.concat([storage_summary_rows, pd.DataFrame(storage_data)], ignore_index=True)
+
+def get_database_service_types():
+    """Define the categorization of database services"""
+    return {
+        'managed': [
+            'RDS MySQL',
+            'RDS PostgreSQL',
+            'RDS MariaDB',
+            'RDS Oracle',
+            'RDS Storage',
+            'RDS SQL Server',
+            'RDS Instances',
+            'Relational Database Services (RDS) - Aurora MySQL',  # Regular Aurora MySQL is managed
+            'Relational Database Services (RDS) - Aurora PostgreSQL'  # Regular Aurora PostgreSQL is managed
+        ],
+        'serverless': [
+            'Aurora MySQL Serverless',
+            'Aurora PostgreSQL Serverless',
+            'Aurora Serverless v2',
+            'DynamoDB',
+            'DDB',
+            'Elasticache',
+            'ElastiCache',
+            'DocumentDB'
+        ]
+    }
+
+
+def get_primary_database_services(df):
+    """Identify primary database services used by account and categorize them"""
+    if df is None:
+        return "No data"
+    
+    # Get service categorization
+    db_types = get_database_service_types()
+    managed_db_services = db_types['managed']
+    serverless_db_services = db_types['serverless']
+    
+    managed_services = []
+    serverless_services = []
+    
+    for _, row in df.iterrows():
+        service = str(row.iloc[0])
+        spend = clean_amount(row.iloc[1])
+        
+        if spend > 0:
+            # Check for serverless services first (more specific matches)
+            if any(s.lower() in service.lower() for s in serverless_db_services):
+                serverless_services.append((service, spend))
+            # Then check for managed services
+            elif any(s.lower() in service.lower() for s in managed_db_services):
+                managed_services.append((service, spend))
+    
+    if not managed_services and not serverless_services:
+        return "None"
+    
+    # Sort services by spend within each category
+    managed_services.sort(key=lambda x: x[1], reverse=True)
+    serverless_services.sort(key=lambda x: x[1], reverse=True)
+    
+    # Format the output
+    result = []
+    
+    if managed_services:
+        managed_str = "Managed: " + "; ".join(s[0] for s in managed_services[:2])
+        result.append(managed_str)
+        
+    if serverless_services:
+        serverless_str = "Serverless: " + "; ".join(s[0] for s in serverless_services[:2])
+        result.append(serverless_str)
+    
+    return " | ".join(result)
+
+def create_database_services_summary(account_domain_spend):
+    """Create Database services summary dataframe"""
+    db_data = []
+    db_usage_pcts = []
+    
+    # Track serverless and managed usage
+    serverless_users = set()
+    managed_users = set()
+    total_accounts = 0
+    
+    for account_name, data in account_domain_spend.items():
+        total_accounts += 1
+        total_spend = data['total']
+        db_spend = data['domains'].get('DB Services', 0)
+        db_pct = (db_spend / total_spend * 100) if total_spend > 0 else 0
+        db_usage_pcts.append((account_name, db_pct))
+        
+        # Calculate service type totals
+        if cleaned_data.get(account_name) is not None:
+            has_managed = False
+            has_serverless = False
+            
+            for _, row in cleaned_data[account_name].iterrows():
+                service = str(row.iloc[0])
+                spend = clean_amount(row.iloc[1])
+                
+                if spend > 0:
+                    # Explicitly check for serverless services
+                    if (‘aurora' in service.lower() and 'serverless' in service.lower()) or \
+                       'dynamodb' in service.lower() or \
+                       'ddb' in service.lower() or \
+                       'elasticache' in service.lower() or \
+                       'documentdb' in service.lower():
+                        has_serverless = True
+                        print(f"Serverless service found for {account_name}: {service}")  # Debug log
+                    
+                    # Check for managed services
+                    elif 'rds' in service.lower() or \
+                         ('aurora' in service.lower() and 'serverless' not in service.lower()):
+                        has_managed = True
+                        print(f"Managed service found for {account_name}: {service}")  # Debug log
+            
+            if has_serverless:
+                serverless_users.add(account_name)
+            if has_managed:
+                managed_users.add(account_name)
+        
+        primary_services = get_primary_database_services(cleaned_data.get(account_name))
+        
+        db_data.append({
+            'Customer Name': account_name,
+            'Total Spend': f"${total_spend:,.2f}",
+            'Database Services Total': f"${db_spend:,.2f}",
+            'Database Services %': f"{db_pct:.2f}%",
+            'Primary Database Services': primary_services
+        })
+    
+    highest_db = max(db_usage_pcts, key=lambda x: x[1]) if db_usage_pcts else ('None', 0)
+    avg_db = sum(pct for _, pct in db_usage_pcts) / len(db_usage_pcts) if db_usage_pcts else 0
+    
+    # Print debug information
+    print("\nServerless Users:", sorted(serverless_users))
+    print("Managed Users:", sorted(managed_users))
+    
+    # Calculate percentages
+    serverless_pct = (len(serverless_users) / total_accounts * 100) if total_accounts > 0 else 0
+    managed_pct = (len(managed_users) / total_accounts * 100) if total_accounts > 0 else 0
+    
+    # Format serverless users list
+    serverless_accounts_str = ', '.join(sorted(serverless_users)) if serverless_users else 'None'
+    managed_accounts_str = ', '.join(sorted(managed_users)) if managed_users else 'None'
+    
+    serverless_users_str = f"{serverless_pct:.1f}% ({len(serverless_users)} customers): {serverless_accounts_str}"
+    managed_users_str = f"{managed_pct:.1f}% ({len(managed_users)} customers): {managed_accounts_str}"
+    
+    # Create summary section
+    db_summary_rows = pd.DataFrame({
+        'Customer Name': [
+            'Database Services Analysis Summary',
+            '',
+            'Serverless Database Usage',
+            'Managed Database Usage',
+            '',
+            'Total Customers Using Databases',
+            'Highest Database Usage',
+            'Average Database Usage',
+            'Most Common Services',
+            ''
+        ],
+        'Total Spend': [
+            '',
+            '',
+            serverless_users_str,
+            managed_users_str,
+            '',
+            str(sum(1 for _, pct in db_usage_pcts if pct > 0)),
+            f"{highest_db[1]:.2f}% ({highest_db[0]})",
+            f"{avg_db:.2f}%",
+            get_most_common_database_services(cleaned_data),
+            ''
+        ],
+        'Database Services Total': [''] * 10,
+        'Database Services %': [''] * 10,
+        'Primary Database Services': [''] * 10
+    })
+    
+    # Sort the detail rows by Database Services % (descending)
+    df_details = pd.DataFrame(db_data)
+    df_details['Sort Value'] = df_details['Database Services %'].apply(
+        lambda x: float(x.replace('%', '')) if x != '' else 0
+    )
+    df_details = df_details.sort_values('Sort Value', ascending=False)
+    df_details = df_details.drop('Sort Value', axis=1)
+    
+    # Combine summary and sorted details
+    df_database = pd.concat([db_summary_rows, df_details], ignore_index=True)
+    
+    return df_database
+
+
+
+# Helper functions to identify primary services
+def get_primary_compute_services(df):
+    """Identify primary compute services used by account"""
+    if df is None:
+        return "No data"
+    
+    compute_services = [
+        'EC2', 'ECS', 'EKS', 'Lambda', 'Elastic Load Balancing',
+        'Auto Scaling', 'Elastic Beanstalk'
+    ]
+    
+    services = []
+    for _, row in df.iterrows():
+        service = str(row.iloc[0])
+        if any(cs.lower() in service.lower() for cs in compute_services):
+            spend = clean_amount(row.iloc[1])
+            if spend > 0:
+                services.append((service, spend))
+    
+    if not services:
+        return "None"
+    
+    # Return top 3 by spend
+    top_services = sorted(services, key=lambda x: x[1], reverse=True)[:3]
+    return "; ".join(f"{s[0]}" for s in top_services)
+
+def get_primary_storage_services(df):
+    """Identify primary storage services used by account"""
+    if df is None:
+        return "No data"
+    
+    storage_services = [
+        'S3', 'EBS', 'EFS', 'FSx', 'Storage Gateway',
+        'Glacier', 'Backup'
+    ]
+    
+    services = []
+    for _, row in df.iterrows():
+        service = str(row.iloc[0])
+        if any(ss.lower() in service.lower() for ss in storage_services):
+            spend = clean_amount(row.iloc[1])
+            if spend > 0:
+                services.append((service, spend))
+    
+    if not services:
+        return "None"
+    
+    top_services = sorted(services, key=lambda x: x[1], reverse=True)[:3]
+    return "; ".join(f"{s[0]}" for s in top_services)
+
+def get_primary_database_services(df):
+    """Identify primary database services used by account"""
+    if df is None:
+        return "No data"
+    
+    db_services = [
+        'RDS', 'Aurora', 'DynamoDB', 'ElastiCache',
+        'Redshift', 'DocumentDB', 'Neptune'
+    ]
+    
+    services = []
+    for _, row in df.iterrows():
+        service = str(row.iloc[0])
+        if any(ds.lower() in service.lower() for ds in db_services):
+            spend = clean_amount(row.iloc[1])
+            if spend > 0:
+                services.append((service, spend))
+    
+    if not services:
+        return "None"
+    
+    top_services = sorted(services, key=lambda x: x[1], reverse=True)[:3]
+    return "; ".join(f"{s[0]}" for s in top_services)
+
+# Helper functions to get most common services across all accounts
+def get_most_common_compute_services(cleaned_data):
+    """Get most commonly used compute services across all accounts"""
+    service_counts = {}
+    for df in cleaned_data.values():
+        services = get_primary_compute_services(df).split("; ")
+        for service in services:
+            if service not in ["None", "No data"]:
+                service_counts[service] = service_counts.get(service, 0) + 1
+    
+    if not service_counts:
+        return "None"
+    
+    top_services = sorted(service_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+    return "; ".join(f"{s[0]}" for s in top_services)
+
+def get_most_common_storage_services(cleaned_data):
+    """Get most commonly used storage services across all accounts"""
+    service_counts = {}
+    for df in cleaned_data.values():
+        services = get_primary_storage_services(df).split("; ")
+        for service in services:
+            if service not in ["None", "No data"]:
+                service_counts[service] = service_counts.get(service, 0) + 1
+    
+    if not service_counts:
+        return "None"
+    
+    top_services = sorted(service_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+    return "; ".join(f"{s[0]}" for s in top_services)
+
+def get_most_common_database_services(cleaned_data):
+    """Get most commonly used database services across all accounts"""
+    service_counts = {}
+    for df in cleaned_data.values():
+        if df is not None:
+            for _, row in df.iterrows():
+                service = str(row.iloc[0])
+                spend = clean_amount(row.iloc[1])
+                if spend > 0:
+                    if any(db_service in service for db_service in ['RDS', 'Aurora', 'DynamoDB', 'ElastiCache', 'DocumentDB']):
+                        service_counts[service] = service_counts.get(service, 0) + 1
+    
+    if not service_counts:
+        return "None"
+    
+    # Get top 3 most common services
+    top_services = sorted(service_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+    return "; ".join(service[0] for service in top_services)
+
+def create_ml_services_summary(account_domain_spend):
+    """Create ML services summary dataframe"""
+    # Create ML services detail rows
+    ml_data = []
+    ml_usage_pcts = []
+    
+    for account_name, data in account_domain_spend.items():
+        total_spend = data['total']
+        ml_spend = data['domains'].get('Machine Learning & Deep Learning', 0)
+        ml_pct = (ml_spend / total_spend * 100) if total_spend > 0 else 0
+        ml_usage_pcts.append((account_name, ml_pct))
+        
+        ml_data.append({
+            'Customer Name': account_name,
+            'Total Spend': f"${total_spend:,.2f}",
+            'ML Services Total': f"${ml_spend:,.2f}",
+            'ML Services %': f"{ml_pct:.2f}%"
+        })
+    
+    highest_ml = max(ml_usage_pcts, key=lambda x: x[1]) if ml_usage_pcts else ('None', 0)
+    avg_ml = sum(pct for _, pct in ml_usage_pcts) / len(ml_usage_pcts) if ml_usage_pcts else 0
+    
+    # Create summary section
+    ml_summary_rows = pd.DataFrame({
+        'Customer Name': [
+            'ML Services Analysis Summary',
+            '',
+            'Total Customers Using ML Services',
+            'Highest ML Usage',
+            'Average ML Usage',
+            ''
+        ],
+        'Total Spend': [
+            '',
+            '',
+            str(sum(1 for _, pct in ml_usage_pcts if pct > 0)),
+            f"{highest_ml[1]:.2f}% ({highest_ml[0]})",
+            f"{avg_ml:.2f}%",
+            ''
+        ],
+        'ML Services Total': [''] * 6,
+        'ML Services %': [''] * 6
+    })
+    
+    # Combine summary and details
+    df_ml_details = pd.DataFrame(ml_data)
+    df_ml_combined = pd.concat([ml_summary_rows, df_ml_details], ignore_index=True)
+    
+    return df_ml_combined
 
 def clean_excel_data(excel_file_path):
     """Clean and standardize Excel data"""
@@ -817,111 +1311,6 @@ def format_excel_with_highlights(worksheet, sheet_name=''):
     worksheet.freeze_panes = 'A2'
     worksheet.auto_filter.ref = worksheet.dimensions
 
-def create_service_category_analysis(cleaned_data):
-    """Create analysis of service category percentages based on domain header rows"""
-    service_categories = get_service_domains()
-    analysis_data = []
-    
-    for account_name, df in cleaned_data.items():
-        try:
-            total_spend = get_account_total_spend(df)
-            print(f"Processing {account_name} with total spend: ${total_spend:,.2f}")
-            
-            category_spend = {category: 0 for category in service_categories.keys()}
-            
-            for idx, row in df.iterrows():
-                service_name = str(row.iloc[0])
-                if pd.isna(service_name) or 'View AWS service' in service_name:
-                    continue
-                
-                for domain in service_categories.keys():
-                    if service_name == domain:
-                        spend = clean_amount(row.iloc[1])
-                        category_spend[domain] = spend
-                        break
-            
-            row_data = {
-                'Customer Name': account_name,
-                'Total Spend': total_spend  # Store as number for comparison
-            }
-            
-            for category in service_categories.keys():
-                spend = category_spend[category]
-                percentage = (spend / total_spend * 100) if total_spend > 0 else 0
-                row_data[f"{category} %"] = percentage
-                row_data[f"{category} Spend"] = spend
-            
-            analysis_data.append(row_data)
-            
-        except Exception as e:
-            print(f"Error processing {account_name}: {str(e)}")
-            continue
-
-    # Create DataFrame
-    df_analysis = pd.DataFrame(analysis_data)
-    
-    # Calculate averages before adding the average row
-    spend_avg = df_analysis['Total Spend'].mean()
-    category_avgs = {}
-    for category in service_categories.keys():
-        category_avgs[f"{category} %"] = df_analysis[f"{category} %"].mean()
-        category_avgs[f"{category} Spend"] = df_analysis[f"{category} Spend"].mean()
-    
-    # Add industry average row
-    avg_row = {
-        'Customer Name': 'Industry Average',
-        'Total Spend': spend_avg
-    }
-    avg_row.update({k: v for k, v in category_avgs.items()})
-    df_analysis = pd.concat([df_analysis, pd.DataFrame([avg_row])], ignore_index=True)
-    
-    # Format cells with conditional bold styling
-    for category in service_categories.keys():
-        # Format percentages with bold for above average
-        pct_col = f"{category} %"
-        df_analysis[pct_col] = df_analysis.apply(
-            lambda row: format_with_bold(
-                row[pct_col], 
-                category_avgs[pct_col],
-                is_percentage=True
-            ) if row['Customer Name'] != 'Industry Average' else f"{row[pct_col]:.2f}%",
-            axis=1
-        )
-        
-        # Format spend amounts with bold for above average
-        spend_col = f"{category} Spend"
-        df_analysis[spend_col] = df_analysis.apply(
-            lambda row: format_with_bold(
-                row[spend_col], 
-                category_avgs[spend_col],
-                is_percentage=False
-            ) if row['Customer Name'] != 'Industry Average' else f"${row[spend_col]:,.2f}",
-            axis=1
-        )
-    
-    # Format total spend with bold for above average
-    df_analysis['Total Spend'] = df_analysis.apply(
-        lambda row: format_with_bold(
-            row['Total Spend'], 
-            spend_avg,
-            is_percentage=False
-        ) if row['Customer Name'] != 'Industry Average' else f"${row['Total Spend']:,.2f}",
-        axis=1
-    )
-    
-    # Add top categories
-    df_analysis['Top Categories'] = df_analysis.apply(
-        lambda row: get_top_categories(row, service_categories.keys()), 
-        axis=1
-    )
-    
-    # Add distribution score
-    df_analysis['Category Distribution Score'] = df_analysis.apply(
-        lambda row: calculate_category_distribution_score(row, service_categories.keys()), 
-        axis=1
-    )
-    
-    return df_analysis
 
 def format_with_bold(value, average, is_percentage=False):
     """Format value with bold HTML if above average"""
@@ -1025,64 +1414,436 @@ def get_top_categories(row, percentage_cols):
         return "None"
 
 
-def save_analysis_to_excel(output_file, df_summary, df_comparative, df_trends, df_monthly_trends, df_cumulative, cleaned_data):
-    """Save all analysis results to Excel file with comprehensive formatting"""
-    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-        # Create and save service category analysis
-        df_service_categories = create_service_category_analysis(cleaned_data)
-        df_service_categories.to_excel(writer, sheet_name='Service Categories', index=False)
-        
-        # Save other analyses
-        df_summary.to_excel(writer, sheet_name='Domain Summary', index=False)
-        df_comparative.to_excel(writer, sheet_name='Account Comparison', index=False)
-        df_trends.to_excel(writer, sheet_name='Monthly Trends', index=True)
-        df_monthly_trends.to_excel(writer, sheet_name='Detailed Analysis', index=False)
-        df_cumulative.to_excel(writer, sheet_name='Cumulative Analysis', index=False)
-        
-        workbook = writer.book
-        
-        # Format Service Categories sheet
-        service_cat_sheet = workbook['Service Categories']
-        format_service_category_sheet(service_cat_sheet)
-        
-        # Format other sheets
-        for sheet_name in workbook.sheetnames:
-            if sheet_name != 'Service Categories':
-                format_excel_with_highlights(workbook[sheet_name], sheet_name)
+def format_sheet(worksheet, workbook, is_summary=False, is_ml_summary=False):
+    """Format worksheet with specified styling"""
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.styles.numbers import FORMAT_CURRENCY_USD_SIMPLE
+    
+    # Define styles
+    header_fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
+    white_font = Font(color='FFFFFF', bold=True)
+    center_aligned = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    right_aligned = Alignment(horizontal='right', vertical='center')
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
 
-def format_service_category_sheet(worksheet):
-    """Format the service category analysis sheet"""
-    # Colors
-    header_color = "1F4E78"
-    alt_row = "F5F5F5"
-    highlight_threshold = "90EE90"  # Light green for high percentages
+    # Set column widths
+    worksheet.column_dimensions['A'].width = 40  # Metric/Customer Name column
+    for col in ['B', 'C', 'D']:
+        worksheet.column_dimensions[col].width = 25  # Value/other columns
+
+    if is_summary:
+        # Format header row
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = white_font
+            cell.alignment = center_aligned
+            cell.border = border
+
+        # Format value column for currency
+        for row in range(2, worksheet.max_row + 1):
+            cell = worksheet[f'B{row}']
+            if cell.value and isinstance(cell.value, str) and cell.value.startswith('$'):
+                cell.number_format = FORMAT_CURRENCY_USD_SIMPLE
+                cell.alignment = right_aligned
+
+    elif is_ml_summary:
+        # Format the ML summary section headers
+        for cell in worksheet[1]:
+            cell.fill = header_fill
+            cell.font = white_font
+            cell.alignment = center_aligned
+            cell.border = border
+
+        # Format the details table header (row 9)
+        for cell in worksheet[9]:
+            cell.fill = header_fill
+            cell.font = white_font
+            cell.alignment = center_aligned
+            cell.border = border
+
+        # Format currency and percentage columns
+        for row in range(2, worksheet.max_row + 1):
+            # Format Total Spend column
+            cell = worksheet[f'B{row}']
+            if cell.value and isinstance(cell.value, str) and cell.value.startswith('$'):
+                cell.number_format = FORMAT_CURRENCY_USD_SIMPLE
+                cell.alignment = right_aligned
+
+            # Format ML Services Total column
+            cell = worksheet[f'C{row}']
+            if cell.value and isinstance(cell.value, str) and cell.value.startswith('$'):
+                cell.number_format = FORMAT_CURRENCY_USD_SIMPLE
+                cell.alignment = right_aligned
+
+            # Format ML Services % column
+            cell = worksheet[f'D{row}']
+            if cell.value and isinstance(cell.value, str) and cell.value.endswith('%'):
+                cell.alignment = right_aligned
+
+
+def create_service_group_summary(df_service_groups):
+    """Create summary section for service group analysis"""
+    def clean_percentage(value):
+        """Clean percentage string and convert to float"""
+        if isinstance(value, str):
+            # Remove HTML tags and multiple percentages
+            clean_val = value.replace('<b>', '').replace('</b>', '').split('%')[0]
+            try:
+                return float(clean_val)
+            except ValueError:
+                return 0.0
+        return value
+
+    def get_stats(column):
+        """Get statistics for a column"""
+        values = df_service_groups[column].apply(clean_percentage)
+        avg = values.mean()
+        max_val = values.max()
+        min_val = values.min()
+        max_account = df_service_groups.loc[values.idxmax(), 'Customer Name']
+        min_account = df_service_groups.loc[values.idxmin(), 'Customer Name']
+        return avg, max_val, min_val, max_account, min_account
+
+    summary_data = []
     
-    # Format headers
-    for cell in worksheet[1]:
-        cell.fill = PatternFill(start_color=header_color, end_color=header_color, fill_type="solid")
-        cell.font = Font(color="FFFFFF", bold=True)
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    # Add header
+    summary_data.append({
+        'Metric': 'Service Group Analysis Summary',
+        'Value': ''
+    })
+    summary_data.append({})  # Empty row
     
-    # Format data rows
-    for row_idx, row in enumerate(worksheet.iter_rows(min_row=2), 2):
-        fill_color = alt_row if row_idx % 2 == 0 else "FFFFFF"
+    # Process each service category
+    categories = [
+        'Compute Services',
+        'Storage',
+        'Security Services',
+        'DB Services'
+    ]
+    
+    for category in categories:
+        column = f"{category} %"
+        avg, max_val, min_val, max_account, min_account = get_stats(column)
         
-        for cell_idx, cell in enumerate(row):
-            cell.alignment = Alignment(horizontal='center', vertical='center')
+        summary_data.extend([
+            {'Metric': f'{category} % Statistics', 'Value': ''},
+            {'Metric': 'Industry Average', 'Value': f"{avg:.2f}%"},
+            {'Metric': 'Highest Usage', 'Value': f"{max_val:.2f}% ({max_account})"},
+            {'Metric': 'Lowest Usage', 'Value': f"{min_val:.2f}% ({min_account})"}
+        ])
+        summary_data.append({})  # Empty row
+    
+    # Add extra empty row before detailed data
+    summary_data.append({})
+    
+    return pd.DataFrame(summary_data)
+
+
+def create_service_category_analysis(cleaned_data):
+    """Create analysis of service category percentages based on domain header rows"""
+    service_categories = get_service_domains()
+    analysis_data = []
+    
+    for account_name, df in cleaned_data.items():
+        try:
+            total_spend = get_account_total_spend(df)
+            print(f"Processing {account_name} with total spend: ${total_spend:,.2f}")
             
-            # Basic cell formatting
-            if cell_idx > 1:  # Percentage columns
-                try:
-                    value = float(str(cell.value).replace('%', ''))
-                    if value > 20:  # Highlight significant percentages
-                        cell.fill = PatternFill(start_color=highlight_threshold, end_color=highlight_threshold, fill_type="solid")
-                    else:
-                        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-                except:
-                    cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+            category_spend = {category: 0 for category in service_categories.keys()}
+            uncategorized_spend = 0
+            
+            # First pass to calculate categorized spend
+            for idx, row in df.iterrows():
+                service_name = str(row.iloc[0])
+                if pd.isna(service_name) or 'View AWS service' in service_name:
+                    continue
+                
+                spend = clean_amount(row.iloc[1])
+                categorized = False
+                
+                for domain in service_categories.keys():
+                    if service_name == domain:
+                        category_spend[domain] = spend
+                        categorized = True
+                        break
+                
+                if not categorized:
+                    uncategorized_spend += spend
+            
+            # Find highest spend domain
+            if category_spend:
+                highest_domain = max(category_spend.items(), key=lambda x: x[1])
+                highest_domain_name = highest_domain[0]
+                highest_domain_spend = highest_domain[1]
+                highest_domain_pct = (highest_domain_spend / total_spend * 100) if total_spend > 0 else 0
             else:
-                cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-                cell.font = Font(bold=True)
+                highest_domain_name = "None"
+                highest_domain_spend = 0
+                highest_domain_pct = 0
+            
+            row_data = {
+                'Customer Name': account_name,
+                'Total Spend': total_spend,
+                'Highest Spend Domain': f"{highest_domain_name} (${highest_domain_spend:,.2f}, {highest_domain_pct:.2f}%)"
+            }
+            
+            # Calculate percentages for service categories only (excluding uncategorized)
+            percentages_sum = 0
+            for category in service_categories.keys():
+                spend = category_spend[category]
+                percentage = (spend / total_spend * 100) if total_spend > 0 else 0
+                row_data[f"{category} %"] = percentage
+                percentages_sum += percentage
+            
+            # Add sum of service category percentages
+            row_data['Total Category %'] = percentages_sum
+            
+            analysis_data.append(row_data)
+            
+        except Exception as e:
+            print(f"Error processing {account_name}: {str(e)}")
+            continue
+
+    # Create DataFrame
+    df_analysis = pd.DataFrame(analysis_data)
+    
+    # Calculate averages before adding the average row
+    spend_avg = df_analysis['Total Spend'].mean()
+    category_avgs = {}
+    for category in service_categories.keys():
+        category_avgs[f"{category} %"] = df_analysis[f"{category} %"].mean()
+    
+    # Add industry average row
+    avg_row = {
+        'Customer Name': 'Industry Average',
+        'Total Spend': spend_avg,
+        'Highest Spend Domain': 'Average across all accounts'
+    }
+    avg_row.update({k: v for k, v in category_avgs.items()})
+    avg_row['Total Category %'] = sum(category_avgs.values())
+    
+    df_analysis = pd.concat([df_analysis, pd.DataFrame([avg_row])], ignore_index=True)
+    
+    # Format all percentage columns
+    percentage_columns = [col for col in df_analysis.columns if col.endswith(' %')]
+    for col in percentage_columns:
+        df_analysis[col] = df_analysis[col].apply(
+            lambda x: f"{x:.2f}%"
+        )
+    
+    # Format total spend
+    df_analysis['Total Spend'] = df_analysis['Total Spend'].apply(
+        lambda x: f"${x:,.2f}"
+    )
+    
+    # Add top categories
+    df_analysis['Top Categories'] = df_analysis.apply(
+        lambda row: get_top_categories(row, service_categories.keys()), 
+        axis=1
+    )
+    
+    return df_analysis
+
+
+
+def save_analysis_to_excel(output_file, df_summary, df_monthly_trends, 
+                         df_cumulative, cleaned_data):
+    """Save all analysis results to Excel file with combined analysis"""
+    try:
+        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            # Create and save overall summary
+            print("Creating Overall Summary...")
+            df_overall_summary = create_overall_summary(cleaned_data, account_domain_spend)
+            df_overall_summary.to_excel(writer, sheet_name='Overall Summary', index=False)
+            
+            # Create service group analysis
+            print("Creating Service Group Analysis...")
+            df_service_groups = create_service_category_analysis(cleaned_data)
+            
+            # Create specialized service summaries
+            print("Creating Service-Specific Summaries...")
+            df_ml_summary = create_ml_services_summary(account_domain_spend)
+            df_compute_summary = create_compute_services_summary(account_domain_spend)
+            df_storage_summary = create_storage_services_summary(account_domain_spend)
+            df_database_summary = create_database_services_summary(account_domain_spend)
+            
+            # Save all sheets in desired order
+            print("Saving all analysis sheets...")
+            
+            # 1. Overall Summary (already saved)
+            # 2. Service Group Analysis
+            df_service_groups.to_excel(writer, sheet_name='Service Group Analysis', index=False)
+            
+            # 3. Service Summaries
+            df_ml_summary.to_excel(writer, sheet_name='ML Services Summary', index=False)
+            df_compute_summary.to_excel(writer, sheet_name='Compute Services Summary', index=False)
+            df_storage_summary.to_excel(writer, sheet_name='Storage Services Summary', index=False)
+            df_database_summary.to_excel(writer, sheet_name='Database Services Summary', index=False)
+            
+            # 4. Other Analysis Sheets
+            df_summary.to_excel(writer, sheet_name='Domain Summary', index=False)
+            df_monthly_trends.to_excel(writer, sheet_name='Detailed Analysis', index=False)
+            
+            # Get workbook and format all sheets
+            workbook = writer.book
+            
+            print("Applying formatting to sheets...")
+            
+            # Format Overall Summary
+            worksheet = writer.sheets['Overall Summary']
+            format_sheet(worksheet, workbook, is_summary=True)
+            
+            # Format Service Group Analysis
+            worksheet = writer.sheets['Service Group Analysis']
+            format_excel_with_highlights(worksheet, 'Service Group Analysis')
+            
+            # Format Service Summaries
+            service_summary_sheets = [
+                'ML Services Summary',
+                'Compute Services Summary',
+                'Storage Services Summary',
+                'Database Services Summary'
+            ]
+            
+            for sheet_name in service_summary_sheets:
+                print(f"Formatting {sheet_name}...")
+                worksheet = writer.sheets[sheet_name]
+                format_service_summary_sheet(worksheet, sheet_name)
+            
+            # Format remaining Analysis Sheets
+            analysis_sheets = [
+                'Domain Summary',
+                'Detailed Analysis'
+            ]
+            
+            for sheet_name in analysis_sheets:
+                print(f"Formatting {sheet_name}...")
+                worksheet = writer.sheets[sheet_name]
+                format_excel_with_highlights(worksheet, sheet_name)
+            
+            # Adjust column widths for all sheets
+            for sheet_name in writer.sheets:
+                worksheet = writer.sheets[sheet_name]
+                adjust_column_widths(worksheet)
+            
+            print("Adding final touches...")
+            # Add filters and freeze panes for all sheets
+            for sheet_name in writer.sheets:
+                worksheet = writer.sheets[sheet_name]
+                worksheet.freeze_panes = 'A2'
+                worksheet.auto_filter.ref = worksheet.dimensions
+            
+            print(f"Successfully saved analysis to {output_file}")
+            
+    except Exception as e:
+        print(f"Error saving Excel file: {str(e)}")
+        raise
+
+
+def format_service_summary_sheet(worksheet, sheet_name):
+    """Apply specialized formatting for service summary sheets"""
+    # Define styles
+    header_fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
+    summary_fill = PatternFill(start_color='E6E6E6', end_color='E6E6E6', fill_type='solid')
+    above_avg_fill = PatternFill(start_color='90EE90', end_color='90EE90', fill_type='solid')  # Light green
+    white_font = Font(color='FFFFFF', bold=True)
+    bold_font = Font(bold=True)
+    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    right_align = Alignment(horizontal='right', vertical='center')
+    
+    # Get the percentage column index
+    percentage_col = None
+    for idx, cell in enumerate(worksheet[1], 1):
+        if 'Services %' in str(cell.value):
+            percentage_col = idx
+            break
+
+    # If we found the percentage column, calculate average
+    if percentage_col:
+        # Skip summary rows (first 7 rows) and get all percentage values
+        percentages = []
+        for row in range(9, worksheet.max_row + 1):  # Start after summary section
+            cell_value = worksheet.cell(row=row, column=percentage_col).value
+            if isinstance(cell_value, str) and '%' in cell_value:
+                try:
+                    percentage = float(cell_value.replace('%', ''))
+                    percentages.append(percentage)
+                except ValueError:
+                    continue
+
+        if percentages:
+            avg_percentage = sum(percentages) / len(percentages)
+
+            # Now highlight cells above average
+            for row in range(9, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row, column=percentage_col)
+                if isinstance(cell.value, str) and '%' in cell.value:
+                    try:
+                        value = float(cell.value.replace('%', ''))
+                        if value > avg_percentage:
+                            cell.fill = above_avg_fill
+                    except ValueError:
+                        continue
+
+    # Format summary section
+    for row in range(1, 8):  # Summary section rows
+        for cell in worksheet[row]:
+            if row == 1:  # Title row
+                cell.font = bold_font
+                cell.fill = summary_fill
+            cell.alignment = center_align
+    
+    # Format column headers for detailed section
+    for cell in worksheet[8]:  # Header row for detailed section
+        cell.fill = header_fill
+        cell.font = white_font
+        cell.alignment = center_align
+    
+    # Format data section
+    for row in range(9, worksheet.max_row + 1):
+        for cell in worksheet[row]:
+            cell.alignment = center_align
+            
+            # Right align amounts and percentages
+            if isinstance(cell.value, str):
+                if cell.value.startswith('$') or cell.value.endswith('%'):
+                    cell.alignment = right_align
+    
+    # Add conditional formatting for percentage columns
+    if sheet_name == 'Compute Services Summary':
+        for col_letter in ['D', 'E']:  # Both percentage columns
+            start_row = 9  # After summary section
+            data_range = f"{col_letter}{start_row}:{col_letter}{worksheet.max_row}"
+            
+            # Get values for the column to calculate average
+            values = []
+            for row in range(start_row, worksheet.max_row + 1):
+                cell = worksheet[f"{col_letter}{row}"]
+                if isinstance(cell.value, str) and '%' in cell.value:
+                    try:
+                        value = float(cell.value.replace('%', ''))
+                        values.append(value)
+                    except ValueError:
+                        continue
+
+            if values:
+                avg_value = sum(values) / len(values)
+                
+                # Highlight cells above average
+                for row in range(start_row, worksheet.max_row + 1):
+                    cell = worksheet[f"{col_letter}{row}"]
+                    if isinstance(cell.value, str) and '%' in cell.value:
+                        try:
+                            value = float(cell.value.replace('%', ''))
+                            if value > avg_value:
+                                cell.fill = above_avg_fill
+                        except ValueError:
+                            continue
     
     # Adjust column widths
     for column in worksheet.columns:
@@ -1090,77 +1851,57 @@ def format_service_category_sheet(worksheet):
         column_letter = column[0].column_letter
         for cell in column:
             try:
-                max_length = max(max_length, len(str(cell.value)))
+                if cell.value:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
             except:
                 pass
-        adjusted_width = min(max_length + 2, 40) * 1.2
+        adjusted_width = min(max_length + 2, 50)
         worksheet.column_dimensions[column_letter].width = adjusted_width
-    
-    # Freeze panes and add filters
-    worksheet.freeze_panes = 'A2'
-    worksheet.auto_filter.ref = worksheet.dimensions
 
-def save_analysis_to_excel(output_file, df_summary, df_comparative, df_trends, df_monthly_trends, df_cumulative, cleaned_data):
-    """Save all analysis results to Excel file with comprehensive formatting"""
-    try:
-        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-            # Create service category analysis
-            print("Creating Service Category Analysis...")
-            df_service_categories = create_service_category_analysis(cleaned_data)
-            
-            # Save sheets, checking for None values
-            sheets_to_save = {
-                'Domain Summary': df_summary,
-                'Account Comparison': df_comparative,
-                'Monthly Trends': df_trends,
-                'Detailed Analysis': df_monthly_trends,
-                'Cumulative Analysis': df_cumulative
-            }
-            
-            # Add service categories if available
-            if df_service_categories is not None:
-                sheets_to_save['Service Categories'] = df_service_categories
-            
-            # Save each sheet that has data
-            sheets_saved = 0
-            for sheet_name, df in sheets_to_save.items():
-                if df is not None and not df.empty:
-                    print(f"Saving {sheet_name} sheet...")
-                    if sheet_name == 'Monthly Trends':
-                        df.to_excel(writer, sheet_name=sheet_name, index=True)
-                    else:
-                        df.to_excel(writer, sheet_name=sheet_name, index=False)
-                    sheets_saved += 1
-            
-            # If no sheets were saved, create a dummy sheet to prevent Excel errors
-            if sheets_saved == 0:
-                print("Warning: No data to save. Creating empty summary sheet.")
-                pd.DataFrame({'No Data': ['No analysis results available']}).to_excel(
-                    writer, sheet_name='Summary', index=False
-                )
-            
-            # Format sheets
-            workbook = writer.book
-            for sheet_name in workbook.sheetnames:
-                if sheet_name == 'Service Categories' and df_service_categories is not None:
-                    format_service_category_sheet(workbook[sheet_name])
-                else:
-                    format_excel_with_highlights(workbook[sheet_name], sheet_name)
-            
-            print(f"Successfully saved {sheets_saved} sheets to {output_file}")
-    
-    except Exception as e:
-        print(f"Error saving Excel file: {str(e)}")
-        print("Attempting to save with minimal formatting...")
+
+def adjust_column_widths(worksheet):
+    """Adjust column widths based on content"""
+    for column in worksheet.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
         
-        # Fallback save with minimal formatting
-        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-            if df_summary is not None and not df_summary.empty:
-                df_summary.to_excel(writer, sheet_name='Summary', index=False)
-            else:
-                pd.DataFrame({'Error': ['Error occurred during analysis']}).to_excel(
-                    writer, sheet_name='Summary', index=False
-                )
+        for cell in column:
+            try:
+                if cell.value:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+            except:
+                pass
+        
+        # Set width with some padding, but not too wide
+        adjusted_width = min(max_length + 2, 50)
+        worksheet.column_dimensions[column_letter].width = adjusted_width
+
+
+
+
+def adjust_column_widths(worksheet):
+    """Adjust column widths based on content"""
+    for column in worksheet.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        
+        for cell in column:
+            try:
+                if cell.value:
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+            except:
+                pass
+        
+        # Set width with some padding, but not too wide
+        adjusted_width = min(max_length + 2, 50)
+        worksheet.column_dimensions[column_letter].width = adjusted_width
+
 
 
 if __name__ == "__main__":
@@ -1206,8 +1947,6 @@ if __name__ == "__main__":
         save_analysis_to_excel(
             output_file,
             df_summary,
-            df_comparative,
-            df_trends,
             df_monthly_trends,
             df_cumulative,
             cleaned_data
